@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,20 +7,354 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── USERS & AUTH ────────────────────────────────────────────────────────────
+
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String    @id @default(cuid())
+  googleId        String    @unique
+  email           String    @unique
+  name            String
+  avatar          String?
+  phone           String?
+  role            String    @default("PARTICIPANT") // SUPER_ADMIN | ADMIN | COUNTER_STAFF | GATE_STAFF | ORGANIZER | PARTICIPANT
+  status          String    @default("active")      // active | suspended | banned
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  orders           Order[]
+  counterStaff     CounterStaff[]
+  gateStaff        GateStaff[]
+  redemptions      Redemption[]
+  gateLogs         GateLog[]
+  auditLogs        AuditLog[]
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// ─── EVENTS ──────────────────────────────────────────────────────────────────
+
+model Event {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  title       String
+  subtitle    String?
+  date        DateTime
+  doorsOpen   DateTime?
+  venue       String
+  city        String
+  address     String?
+  capacity    Int
+  status      String    @default("draft") // draft | published | sold_out | completed
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenantId       String?
+
+  tenant         Tenant?   @relation(fields: [tenantId], references: [id])
+  ticketTypes    TicketType[]
+  orders         Order[]
+  counters       Counter[]
+  gates          Gate[]
+
+  @@index([tenantId])
+}
+
+// ─── TICKET TYPES ────────────────────────────────────────────────────────────
+
+model TicketType {
+  id            String   @id @default(cuid())
+  eventId       String
+  name          String
+  description   String?
+  price         Int
+  quota         Int
+  sold          Int      @default(0)
+  tier          String   @default("floor") // floor | tribun
+  zone          String?
+  emoji         String?
+  benefits      String?  // JSON array stored as string
+  seatConfig    String?  // JSON config stored as string
+
+  event         Event    @relation(fields: [eventId], references: [id])
+  orders        OrderItem[]
+
+  @@index([eventId])
+}
+
+// ─── ORDERS ──────────────────────────────────────────────────────────────────
+
+model Order {
+  id              String    @id @default(cuid())
+  orderCode       String    @unique
+  userId          String
+  eventId         String
+  totalAmount     Int
+  status          String    @default("pending") // pending | paid | rejected | cancelled | expired
+  paymentMethod   String?
+  expiresAt       DateTime?
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user            User      @relation(fields: [userId], references: [id])
+  event           Event     @relation(fields: [eventId], references: [id])
+  items           OrderItem[]
+  tickets         Ticket[]
+
+  @@index([userId])
+  @@index([eventId])
+  @@index([status])
+}
+
+model OrderItem {
+  id              String  @id @default(cuid())
+  orderId         String
+  ticketTypeId    String
+  quantity        Int
+  pricePerTicket  Int
+  subtotal        Int
+
+  order           Order     @relation(fields: [orderId], references: [id])
+  ticketType      TicketType @relation(fields: [ticketTypeId], references: [id])
+
+  @@index([orderId])
+}
+
+// ─── TICKETS ─────────────────────────────────────────────────────────────────
+
+model Ticket {
+  id              String    @id @default(cuid())
+  ticketCode      String    @unique
+  orderId         String
+  ticketTypeId    String
+  attendeeName    String
+  attendeeEmail   String
+  seatLabel       String?
+  qrData          String
+  status          String    @default("active") // active | redeemed | inside | outside | cancelled
+  redeemedAt      DateTime?
+  redeemedBy      String?
+  wristbandCode   String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  order           Order      @relation(fields: [orderId], references: [id])
+  redemptions     Redemption[]
+  gateLogs        GateLog[]
+
+  @@index([orderId])
+  @@index([ticketCode])
+  @@index([status])
+}
+
+// ─── COUNTERS (Wristband Redemption Booths) ──────────────────────────────────
+
+model Counter {
+  id            String    @id @default(cuid())
+  eventId       String
+  name          String
+  location      String?
+  capacity      Int       @default(500)
+  status        String    @default("inactive") // inactive | active | closed
+  openAt        DateTime?
+  closeAt       DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  event         Event     @relation(fields: [eventId], references: [id])
+  staff         CounterStaff[]
+  redemptions   Redemption[]
+
+  @@index([eventId])
+}
+
+// ─── COUNTER STAFF ASSIGNMENT ────────────────────────────────────────────────
+
+model CounterStaff {
+  id            String    @id @default(cuid())
+  userId        String
+  counterId     String
+  shift         String?   // "pagi" | "siang" | "malam" | "full"
+  status        String    @default("active") // active | inactive
+  assignedAt    DateTime  @default(now())
+
+  user          User      @relation(fields: [userId], references: [id])
+  counter       Counter   @relation(fields: [counterId], references: [id])
+
+  @@unique([userId, counterId])
+  @@index([userId])
+  @@index([counterId])
+}
+
+// ─── GATES (Entry/Exit Points) ───────────────────────────────────────────────
+
+model Gate {
+  id              String    @id @default(cuid())
+  eventId         String
+  name            String
+  type            String    @default("entry") // entry | exit | both
+  location        String?
+  minAccessLevel  String?   // Minimum ticket type allowed
+  capacityPerMin  Int       @default(30)
+  status          String    @default("inactive") // inactive | active | closed
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  event           Event     @relation(fields: [eventId], references: [id])
+  staff           GateStaff[]
+  gateLogs        GateLog[]
+
+  @@index([eventId])
+}
+
+// ─── GATE STAFF ASSIGNMENT ───────────────────────────────────────────────────
+
+model GateStaff {
+  id            String    @id @default(cuid())
+  userId        String
+  gateId        String
+  shift         String?   // "pagi" | "siang" | "malam" | "full"
+  status        String    @default("active") // active | inactive
+  assignedAt    DateTime  @default(now())
+
+  user          User      @relation(fields: [userId], references: [id])
+  gate          Gate      @relation(fields: [gateId], references: [id])
+
+  @@unique([userId, gateId])
+  @@index([userId])
+  @@index([gateId])
+}
+
+// ─── REDEMPTIONS (Wristband Exchange) ────────────────────────────────────────
+
+model Redemption {
+  id              String    @id @default(cuid())
+  ticketId        String    @unique
+  counterId       String
+  staffId         String    // User ID of counter staff
+  wristbandCode   String
+  wristbandColor  String
+  wristbandType   String    // e.g. "VVIP Gold", "VIP Teal", "Regular Blue"
+  notes           String?
+  redeemedAt      DateTime  @default(now())
+
+  ticket          Ticket    @relation(fields: [ticketId], references: [id])
+  counter         Counter   @relation(fields: [counterId], references: [id])
+  staff           User      @relation(fields: [staffId], references: [id])
+
+  @@index([counterId])
+  @@index([staffId])
+  @@index([redeemedAt])
+}
+
+// ─── GATE LOGS (Entry/Exit Tracking) ─────────────────────────────────────────
+
+model GateLog {
+  id              String    @id @default(cuid())
+  ticketId        String
+  gateId          String
+  staffId         String    // User ID of gate staff
+  action          String    // IN | OUT
+  notes           String?
+
+  scannedAt       DateTime  @default(now())
+
+  ticket          Ticket    @relation(fields: [ticketId], references: [id])
+  gate            Gate      @relation(fields: [gateId], references: [id])
+  staff           User      @relation(fields: [staffId], references: [id])
+
+  @@index([ticketId])
+  @@index([gateId])
+  @@index([staffId])
+  @@index([scannedAt])
+}
+
+// ─── WRISTBAND INVENTORY ──────────────────────────────────────────────────────
+
+model WristbandInventory {
+  id              String    @id @default(cuid())
+  eventId         String
+  color           String    // Gold, Teal, Orange, Merah, Biru, Hijau, Ungu, Putih
+  colorHex        String    // #FFD700, #008080, etc.
+  type            String    // VVIP Premium, VIP, Festival, CAT 1-5
+  totalStock      Int       @default(0)
+  usedStock       Int       @default(0)
+  remainingStock  Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([eventId, color])
+  @@index([eventId])
+}
+
+// ─── NOTIFICATIONS ──────────────────────────────────────────────────────────
+
+model Notification {
+  id              String    @id @default(cuid())
+  userId          String?
+  eventId         String?
+  title           String
+  message         String
+  type            String    @default("info") // info | warning | success | error
+  category        String?   // order | redemption | gate | system | payment
+  isRead          Boolean   @default(false)
+  data            String?   // JSON payload for deep linking
+  createdAt       DateTime  @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+// ─── TENANT (SaaS Multi-Tenant — Future) ────────────────────────────────────
+
+model Tenant {
+  id              String    @id @default(cuid())
+  name            String
+  slug            String    @unique
+  logo            String?
+  primaryColor    String    @default("#00A39D")
+  secondaryColor  String    @default("#F8AD3C")
+  plan            String    @default("free") // free | pro | enterprise
+  isActive        Boolean   @default(true)
+  maxEvents       Int       @default(1)
+  maxTickets      Int       @default(1000)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  events          Event[]
+  tenantUsers     TenantUser[]
+}
+
+// ─── TENANT USER (Role per Tenant) ──────────────────────────────────────────
+
+model TenantUser {
+  id              String    @id @default(cuid())
+  userId          String
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  role            String    @default("PARTICIPANT") // SUPER_ADMIN | ADMIN | ORGANIZER | COUNTER_STAFF | GATE_STAFF | PARTICIPANT
+  isActive        Boolean   @default(true)
+  joinedAt        DateTime  @default(now())
+
+  @@unique([userId, tenantId])
+  @@index([userId])
+  @@index([tenantId])
+}
+
+// ─── AUDIT LOGS ──────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id              String    @id @default(cuid())
+  userId          String
+  action          String    // CREATE | UPDATE | DELETE | ASSIGN | APPROVE | REJECT | REDEEM | SCAN | LOGIN | LOGOUT
+  module          String    // Auth | Event | Ticket | Order | Counter | Gate | Staff | Settings
+  details         String?
+  ip              String?
+  createdAt       DateTime  @default(now())
+
+  user            User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([module])
+  @@index([createdAt])
 }

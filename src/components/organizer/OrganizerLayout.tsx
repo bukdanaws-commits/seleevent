@@ -1,0 +1,174 @@
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import {
+  LayoutDashboard,
+  Shield,
+  History,
+  Activity,
+  Search,
+  BookOpen,
+  Menu,
+  X,
+  User,
+  LogOut,
+  ChevronRight,
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Separator } from '@/components/ui/separator'
+
+// ============================================================
+// Navigation Config
+// ============================================================
+
+const navItems = [
+  { title: 'Dashboard', href: '/organizer/dashboard', icon: LayoutDashboard },
+  { title: 'Penukaran Gelang', href: '/organizer/redeem', icon: Shield },
+  { title: 'Riwayat', href: '/organizer/redeem-history', icon: History },
+  { title: 'Live Monitor', href: '/organizer/live-monitor', icon: Activity },
+  { title: 'Cek Tiket', href: '/organizer/check-ticket', icon: Search },
+  { title: 'Panduan Gelang', href: '/organizer/wristband-guide', icon: BookOpen },
+]
+
+// ============================================================
+// Component
+// ============================================================
+
+interface OrganizerLayoutProps {
+  children: React.ReactNode
+}
+
+export function OrganizerLayout({ children }: OrganizerLayoutProps) {
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const pathname = usePathname()
+
+  const isActive = (href: string) => {
+    if (href === '/organizer/dashboard') return pathname === '/organizer/dashboard'
+    return pathname.startsWith(href)
+  }
+
+  return (
+    <div className="min-h-screen bg-[#0A0F0E]">
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={cn(
+          'fixed top-0 left-0 z-50 h-full w-64 bg-[#111918] border-r border-white/5 transform transition-transform duration-200 ease-in-out lg:translate-x-0',
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
+        {/* Sidebar Header — Teal accent bar */}
+        <div className="h-1.5 bg-[#00A39D]" />
+        <div className="flex items-center justify-between h-14 px-4 border-b border-white/5">
+          <Link href="/organizer/dashboard" className="flex items-center gap-2">
+            <Activity className="h-5 w-5 text-[#00A39D]" />
+            <span className="font-bold text-base tracking-tight text-white">
+              SHEILA ON 7
+            </span>
+          </Link>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="lg:hidden text-white/60 hover:text-white hover:bg-white/5"
+            onClick={() => setSidebarOpen(false)}
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+
+        {/* Station Info */}
+        <div className="px-4 py-3 border-b border-white/5">
+          <div className="flex items-center gap-2.5">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-[#00A39D]/20 text-[#00A39D] text-xs font-bold">
+                AS
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-white truncate">Andi Setiawan</p>
+              <p className="text-[11px] text-[#7FB3AE] truncate">Organizer</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Sidebar Navigation */}
+        <ScrollArea className="h-[calc(100vh-11rem)]">
+          <nav className="p-3 space-y-1">
+            {navItems.map((item) => {
+              const active = isActive(item.href)
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                    active
+                      ? 'bg-[#00A39D] text-white'
+                      : 'text-[#7FB3AE] hover:bg-white/5 hover:text-white'
+                  )}
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <item.icon className="h-4 w-4 shrink-0" />
+                  <span className="flex-1">{item.title}</span>
+                  {active && <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+                </Link>
+              )
+            })}
+          </nav>
+        </ScrollArea>
+
+        {/* Sidebar Footer */}
+        <div className="absolute bottom-0 left-0 right-0 border-t border-white/5 bg-[#111918]">
+          <div className="px-4 py-3">
+            <p className="text-[10px] text-[#7FB3AE]/60 text-center">
+              Sheila On 7 — Tour 2025
+            </p>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <div className="lg:pl-64">
+        {/* Sticky Header */}
+        <header className="sticky top-0 z-30 h-14 bg-[#0A0F0E]/95 backdrop-blur border-b border-white/5">
+          <div className="flex items-center justify-between h-full px-4">
+            {/* Mobile hamburger */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="lg:hidden text-white/60 hover:text-white hover:bg-white/5"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+
+            <div className="flex items-center gap-3 ml-auto">
+              {/* User info in header */}
+              <div className="hidden sm:flex items-center gap-2 text-xs text-[#7FB3AE]">
+                <User className="w-3.5 h-3.5" />
+                <span>Andi Setiawan</span>
+                <Separator orientation="vertical" className="h-3 bg-white/10" />
+                <span className="text-[#00A39D] font-medium">Organizer</span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Page Content */}
+        <main className="p-4 md:p-6">{children}</main>
+      </div>
+    </div>
+  )
+}
