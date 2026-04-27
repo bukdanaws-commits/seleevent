@@ -8,10 +8,11 @@ import (
 )
 
 type Config struct {
-        App    AppConfig
-        DB     DBConfig
-        JWT    JWTConfig
-        Google GoogleConfig
+        App      AppConfig
+        DB       DBConfig
+        JWT      JWTConfig
+        Google   GoogleConfig
+        Midtrans MidtransConfig
 }
 
 type AppConfig struct {
@@ -26,6 +27,7 @@ type DBConfig struct {
         User       string
         Password   string
         Name       string
+        SSLMode    string
         SQLitePath string
 }
 
@@ -39,6 +41,13 @@ type JWTConfig struct {
 type GoogleConfig struct {
         ClientID     string
         ClientSecret string
+}
+
+type MidtransConfig struct {
+        MerchantID string
+        ServerKey  string
+        ClientKey  string
+        IsSandbox  bool
 }
 
 var Cfg Config
@@ -73,18 +82,24 @@ func Load() {
         _ = viper.BindEnv("DB_PASSWORD")
         _ = viper.BindEnv("DB_NAME")
         _ = viper.BindEnv("DB_SQLITE_PATH")
+        _ = viper.BindEnv("DB_SSLMODE")
         _ = viper.BindEnv("JWT_SECRET")
         _ = viper.BindEnv("JWT_EXPIRATION")
         _ = viper.BindEnv("REFRESH_JWT_EXPIRATION")
         _ = viper.BindEnv("REFRESH_JWT_SECRET")
         _ = viper.BindEnv("GOOGLE_CLIENT_ID")
         _ = viper.BindEnv("GOOGLE_CLIENT_SECRET")
+        _ = viper.BindEnv("MIDTRANS_MERCHANT_ID")
+        _ = viper.BindEnv("MIDTRANS_SERVER_KEY")
+        _ = viper.BindEnv("MIDTRANS_CLIENT_KEY")
+        _ = viper.BindEnv("MIDTRANS_IS_SANDBOX")
 
         // Defaults
         viper.SetDefault("APP_ENV", "development")
         viper.SetDefault("APP_PORT", "8080")
         viper.SetDefault("DB_DRIVER", "sqlite")
         viper.SetDefault("DB_SQLITE_PATH", "./seleevent.db")
+        viper.SetDefault("DB_SSLMODE", "disable")
         viper.SetDefault("JWT_SECRET", "default-secret-change-me")
         viper.SetDefault("JWT_EXPIRATION", "24h")
         viper.SetDefault("REFRESH_JWT_EXPIRATION", "168h")
@@ -104,6 +119,7 @@ func Load() {
                         User:       viper.GetString("DB_USER"),
                         Password:   viper.GetString("DB_PASSWORD"),
                         Name:       viper.GetString("DB_NAME"),
+                        SSLMode:    viper.GetString("DB_SSLMODE"),
                         SQLitePath: viper.GetString("DB_SQLITE_PATH"),
                 },
                 JWT: JWTConfig{
@@ -115,6 +131,12 @@ func Load() {
                 Google: GoogleConfig{
                         ClientID:     viper.GetString("GOOGLE_CLIENT_ID"),
                         ClientSecret: viper.GetString("GOOGLE_CLIENT_SECRET"),
+                },
+                Midtrans: MidtransConfig{
+                        MerchantID: viper.GetString("MIDTRANS_MERCHANT_ID"),
+                        ServerKey:  viper.GetString("MIDTRANS_SERVER_KEY"),
+                        ClientKey:  viper.GetString("MIDTRANS_CLIENT_KEY"),
+                        IsSandbox:  viper.GetBool("MIDTRANS_IS_SANDBOX"),
                 },
         }
 
@@ -141,6 +163,11 @@ func Load() {
         if secretPath := os.Getenv("REFRESH_JWT_SECRET_PATH"); secretPath != "" {
                 if val := loadSecretFromFile(secretPath); val != "" {
                         Cfg.JWT.RefreshSecret = val
+                }
+        }
+        if secretPath := os.Getenv("MIDTRANS_SERVER_KEY_PATH"); secretPath != "" {
+                if val := loadSecretFromFile(secretPath); val != "" {
+                        Cfg.Midtrans.ServerKey = val
                 }
         }
 }

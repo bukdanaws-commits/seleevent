@@ -24,11 +24,13 @@ import {
   MapPin,
   CheckCircle2,
   Copy,
+  Loader2,
 } from "lucide-react";
 import { formatRupiah, formatDate } from "@/lib/utils";
-import { useAuthStore } from "@/lib/auth-store";
+import type { IOrder } from "@/lib/types";
 import { usePageStore } from "@/lib/page-store";
 import { useToast } from "@/hooks/use-toast";
+import { useOrderDetail } from "@/hooks/use-api";
 
 const INSTRUCTIONS = [
   {
@@ -55,11 +57,23 @@ const INSTRUCTIONS = [
 
 export default function ETicketPage() {
   const { currentOrderId, navigateTo } = usePageStore();
-  const { getOrder } = useAuthStore();
   const { toast } = useToast();
 
-  const order = getOrder(currentOrderId || "");
+  // ─── Fetch order detail from API ───────────────────────────
+  const { data: orderData, isLoading } = useOrderDetail(currentOrderId || "");
+  const order = orderData as IOrder | null;
+
   const [activeTab, setActiveTab] = useState("0");
+
+  // ─── Loading state ─────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#0B0B0F] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-green-400 animate-spin" />
+        <span className="ml-3 text-gray-400">Memuat tiket...</span>
+      </div>
+    );
+  }
 
   if (!order) {
     return (
@@ -72,6 +86,10 @@ export default function ETicketPage() {
   const tickets = order.tickets || [];
   const activeTicket = tickets[parseInt(activeTab)];
 
+  const eventTitle = order.event?.title || "Event";
+  const eventDate = order.event?.date || "";
+  const eventCity = order.event?.city || "";
+
   const handleDownload = () => {
     toast({ title: "E-tiket berhasil didownload! 📥" });
   };
@@ -79,7 +97,7 @@ export default function ETicketPage() {
   const handleShare = () => {
     if (activeTicket) {
       navigator.clipboard.writeText(
-        `E-Tiket ${order.eventTitle} - ${activeTicket.ticketCode}`
+        `E-Tiket ${eventTitle} - ${activeTicket.ticketCode}`
       );
       toast({ title: "Link berhasil disalin! 🔗" });
     }
@@ -114,9 +132,9 @@ export default function ETicketPage() {
           <CardContent className="pt-4 space-y-2">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-white font-semibold">{order.eventTitle}</h2>
+                <h2 className="text-white font-semibold">{eventTitle}</h2>
                 <p className="text-gray-400 text-sm">
-                  {order.eventDate} • {order.eventCity}
+                  {eventDate} • {eventCity}
                 </p>
               </div>
               <Badge
@@ -253,9 +271,9 @@ export default function ETicketPage() {
                   <div className="flex items-center justify-between text-xs text-gray-500">
                     <div className="flex items-center gap-1">
                       <MapPin className="w-3 h-3" />
-                      {order.eventCity}
+                      {eventCity}
                     </div>
-                    <span>{order.eventDate}</span>
+                    <span>{eventDate}</span>
                     <span>Powered by SELA</span>
                   </div>
                 </CardContent>

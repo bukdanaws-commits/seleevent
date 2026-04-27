@@ -22,14 +22,15 @@ import {
   Clock,
   XCircle,
   CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
-import type { Order } from "@/lib/mock-data";
-import { useAuthStore } from "@/lib/auth-store";
+import type { IOrder, OrderStatus } from "@/lib/types";
 import { usePageStore } from "@/lib/page-store";
+import { useOrders } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
 
-function getStatusBadge(status: Order["status"]) {
+function getStatusBadge(status: OrderStatus) {
   switch (status) {
     case "pending":
       return (
@@ -48,11 +49,11 @@ function getStatusBadge(status: Order["status"]) {
           Lunas
         </Badge>
       );
-    case "rejected":
+    case "refunded":
       return (
         <Badge variant="destructive" className="text-xs">
           <XCircle className="w-3 h-3 mr-1" />
-          Ditolak
+          Refund
         </Badge>
       );
     case "expired":
@@ -73,7 +74,10 @@ function getStatusBadge(status: Order["status"]) {
 
 export default function MyOrdersPage() {
   const { navigateTo } = usePageStore();
-  const { orders } = useAuthStore();
+  const { data, isLoading } = useOrders();
+
+  // Unwrap paginated data
+  const orders: IOrder[] = (data as { data?: IOrder[] } | null)?.data || [];
 
   return (
     <div className="min-h-screen bg-[#0B0B0F]">
@@ -101,7 +105,12 @@ export default function MyOrdersPage() {
       </header>
 
       <main className="max-w-lg mx-auto px-4 py-6 space-y-4">
-        {orders.length === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-8 h-8 text-green-400 animate-spin" />
+            <span className="ml-3 text-gray-400">Memuat pesanan...</span>
+          </div>
+        ) : orders.length === 0 ? (
           <Card className="bg-[#16161D] border-[#2A2A35]">
             <CardContent className="py-16 text-center">
               <ShoppingBag className="w-16 h-16 text-gray-700 mx-auto mb-4" />
@@ -140,9 +149,14 @@ export default function MyOrdersPage() {
   );
 }
 
-function OrderCard({ order }: { order: Order }) {
+function OrderCard({ order }: { order: IOrder }) {
   const { navigateTo } = usePageStore();
-  const totalTickets = order.items.reduce((s, i) => s + i.quantity, 0);
+
+  const eventTitle = order.event?.title || "Event";
+  const eventDate = order.event?.date || "";
+  const eventCity = order.event?.city || "";
+  const totalTickets = order.items?.reduce((s, i) => s + i.quantity, 0) || 0;
+  const paymentMethod = order.paymentMethod || order.paymentType || "Midtrans";
 
   return (
     <Card
@@ -150,7 +164,7 @@ function OrderCard({ order }: { order: Order }) {
       onClick={() => {
         if (order.status === "pending") navigateTo("payment", order.id);
         else if (order.status === "paid") navigateTo("eticket", order.id);
-        else if (order.status === "rejected") navigateTo("payment", order.id);
+        else if (order.status === "refunded") navigateTo("payment", order.id);
       }}
     >
       <CardContent className="pt-4 space-y-3">
@@ -159,16 +173,22 @@ function OrderCard({ order }: { order: Order }) {
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-white font-semibold text-sm">
-                {order.eventTitle}
+                {eventTitle}
               </span>
             </div>
             <div className="flex items-center gap-3 text-xs text-gray-500">
-              <span className="flex items-center gap-1">
-                <Calendar className="w-3 h-3" />
-                {order.eventDate}
-              </span>
-              <span>•</span>
-              <span>{order.eventCity}</span>
+              {eventDate && (
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  {eventDate}
+                </span>
+              )}
+              {eventCity && (
+                <>
+                  <span>•</span>
+                  <span>{eventCity}</span>
+                </>
+              )}
             </div>
           </div>
           {getStatusBadge(order.status)}
@@ -196,7 +216,7 @@ function OrderCard({ order }: { order: Order }) {
             {totalTickets} tiket
           </span>
           <span className="text-gray-500 text-xs">
-            {order.paymentMethod}
+            {paymentMethod}
           </span>
         </div>
 
@@ -254,7 +274,7 @@ function OrderCard({ order }: { order: Order }) {
               </Button>
             </>
           )}
-          {order.status === "rejected" && (
+          {order.status === "refunded" && (
             <Button
               size="sm"
               className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-black h-9"

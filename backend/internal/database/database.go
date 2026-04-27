@@ -26,17 +26,21 @@ func Connect(cfg config.Config) (*gorm.DB, error) {
                 // Unix socket: host starts with "/" (e.g. /cloudsql/PROJECT:REGION:INSTANCE)
                 // TCP: host is a hostname or IP (e.g. localhost, 10.0.0.1)
                 var dsn string
+                sslmode := cfg.DB.SSLMode
+                if sslmode == "" {
+                        sslmode = "disable"
+                }
                 if strings.HasPrefix(cfg.DB.Host, "/") {
                         // Unix socket connection (Cloud Run + Cloud SQL proxy)
                         dsn = fmt.Sprintf(
-                                "host=%s user=%s password=%s dbname=%s sslmode=disable",
-                                cfg.DB.Host, cfg.DB.User, cfg.DB.Password, cfg.DB.Name,
+                                "host=%s user=%s password=%s dbname=%s sslmode=%s",
+                                cfg.DB.Host, cfg.DB.User, cfg.DB.Password, cfg.DB.Name, sslmode,
                         )
                 } else {
                         // TCP connection (local development)
                         dsn = fmt.Sprintf(
-                                "host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-                                cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Password, cfg.DB.Name,
+                                "host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+                                cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Password, cfg.DB.Name, sslmode,
                         )
                 }
                 db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})

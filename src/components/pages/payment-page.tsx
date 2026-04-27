@@ -26,41 +26,44 @@ import {
   CheckCircle2,
   Send,
   Camera,
+  Loader2,
 } from "lucide-react";
 import { formatRupiah, formatDateTime } from "@/lib/utils";
-import { useCreatePayment, usePaymentStatus } from "@/hooks/use-api";
+import { useCreatePayment, usePaymentStatus, useOrderDetail } from "@/hooks/use-api";
 import { loadMidtransSnap } from "@/lib/midtrans";
-import { useAuthStore } from "@/lib/auth-store";
 import { usePageStore } from "@/lib/page-store";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import type { IOrder } from "@/lib/types";
 
 export default function PaymentPage() {
   const { currentOrderId, navigateTo } = usePageStore();
-  const { getOrder, updateOrder } = useAuthStore();
   const { toast } = useToast();
   const createPayment = useCreatePayment();
 
-  const order = getOrder(currentOrderId || "");
+  // ─── Fetch order detail from API ───────────────────────────
+  const { data: orderData, isLoading: orderLoading } = useOrderDetail(currentOrderId || "");
+  const order = orderData as IOrder | null;
+
   const [uploadedFile, setUploadedFile] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [timeLeft, setTimeLeft] = useState({ hours: 0, minutes: 0, seconds: 0 });
   const [timePercentage, setTimePercentage] = useState(100);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ─── Timer ─────────────────────────────────────────────────────
+  // ─── Timer ─────────────────────────────────────────────────
   useEffect(() => {
-    if (!order) return;
+    if (!order?.expiresAt) return;
 
     const expiresAt = new Date(order.expiresAt).getTime();
-    const totalDuration = 2 * 60 * 60 * 1000; // 2 hours
+    const createdAt = new Date(order.createdAt).getTime();
+    const totalDuration = expiresAt - createdAt || (2 * 60 * 60 * 1000); // fallback 2 hours
 
     const update = () => {
       const now = Date.now();
       const diff = Math.max(0, expiresAt - now);
 
       if (diff <= 0) {
-        updateOrder(order.id, { status: "expired" });
         navigateTo("home");
         toast({ title: "Waktu pembayaran habis", variant: "destructive" });
         return;
@@ -79,9 +82,9 @@ export default function PaymentPage() {
     update();
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
-  }, [order, updateOrder, navigateTo, toast]);
+  }, [order, navigateTo, toast]);
 
-  // ─── File upload handlers ──────────────────────────────────────
+  // ─── File upload handlers ──────────────────────────────────
   const handleFile = useCallback(
     (file: File) => {
       if (!file.type.startsWith("image/")) {
@@ -129,7 +132,7 @@ export default function PaymentPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // ─── Submit ────────────────────────────────────────────────────
+  // ─── Submit ────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (!order) return;
 
@@ -168,6 +171,16 @@ export default function PaymentPage() {
     }
   };
 
+  // ─── Loading state ─────────────────────────────────────────
+  if (orderLoading) {
+    return (
+      <div className="min-h-screen bg-[#0B0B0F] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-green-400 animate-spin" />
+        <span className="ml-3 text-gray-400">Memuat pesanan...</span>
+      </div>
+    );
+  }
+
   if (!order) {
     return (
       <div className="min-h-screen bg-[#0B0B0F] flex items-center justify-center">
@@ -177,6 +190,9 @@ export default function PaymentPage() {
   }
 
   const isUrgent = timeLeft.hours < 0 && timeLeft.minutes < 30;
+  const eventTitle = order.event?.title || "Event";
+  const eventDate = order.event?.date || "";
+  const totalTickets = order.items?.reduce((s, i) => s + i.quantity, 0) || 0;
 
   return (
     <div className="min-h-screen bg-[#0B0B0F]">
@@ -244,15 +260,15 @@ export default function PaymentPage() {
             <Separator className="bg-[#2A2A35]" />
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white font-semibold">{order.eventTitle}</p>
-                <p className="text-gray-400 text-xs">{order.eventDate}</p>
+                <p className="text-white font-semibold">{eventTitle}</p>
+                <p className="text-gray-400 text-xs">{eventDate}</p>
               </div>
               <div className="text-right">
                 <p className="text-green-400 font-bold text-xl">
                   {formatRupiah(order.totalAmount)}
                 </p>
                 <p className="text-gray-500 text-xs">
-                  {order.items.reduce((s, i) => s + i.quantity, 0)} tiket
+                  {totalTickets} tiket
                 </p>
               </div>
             </div>
@@ -427,9 +443,19 @@ export default function PaymentPage() {
           <Button
             className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold h-12"
             onClick={handleSubmit}
+            disabled={createPayment.isPending}
           >
-            <Send className="w-4 h-4 mr-2" />
-            Upload Bukti & Kirim
+            {createPayment.isPending ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Memproses...
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4 mr-2" />
+                Upload Bukti & Kirim
+              </>
+            )}
           </Button>
         </div>
       </div>

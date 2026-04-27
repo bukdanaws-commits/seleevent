@@ -3,13 +3,14 @@ package routes
 import (
         "github.com/bukdanaws-commits/seleevent/backend/internal/handlers"
         "github.com/bukdanaws-commits/seleevent/backend/internal/middleware"
+        "github.com/bukdanaws-commits/seleevent/backend/internal/services"
         "github.com/gofiber/fiber/v2"
         "github.com/gofiber/fiber/v2/middleware/cors"
         "gorm.io/gorm"
 )
 
 // Setup configures all application routes
-func Setup(app *fiber.App, db *gorm.DB) {
+func Setup(app *fiber.App, db *gorm.DB, hub *services.SSEHub) {
         // Initialize validator
         middleware.InitValidator()
 
@@ -42,11 +43,12 @@ func Setup(app *fiber.App, db *gorm.DB) {
 
         // Public - Midtrans payment callback (called by Midtrans servers, NO AUTH)
         public.Post("/payment/callback", handlers.PaymentCallback(db))
+        public.Post("/payment/notification", handlers.PaymentNotification(db))
 
         // SSE (Server-Sent Events) - real-time (supports ?token= query param for EventSource)
         // Placed outside auth group because EventSource API cannot send custom headers;
         // JWTAuthSSE reads token from Authorization header OR ?token= query param.
-        api.Get("/events/stream", middleware.JWTAuthSSE(), handlers.SSEStream(db))
+        api.Get("/events/stream", middleware.JWTAuthSSE(), handlers.SSEStream(db, hub))
 
         // === AUTHENTICATED ROUTES ===
         auth := api.Group("", middleware.JWTAuth())
@@ -65,6 +67,7 @@ func Setup(app *fiber.App, db *gorm.DB) {
         // === PAYMENT ROUTES ===
         payment := auth.Group("/payment")
         payment.Post("/create", handlers.CreatePayment(db))
+        payment.Post("/create-direct", handlers.CreateDirectPayment(db))
         payment.Get("/status/:orderId", handlers.GetPaymentStatus(db))
 
         // === GATE STAFF ROUTES ===

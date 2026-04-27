@@ -10,7 +10,7 @@ import (
 
 // Claims represents the JWT custom claims for authentication.
 type Claims struct {
-        UserID string `json:"userId"`
+        UserID string `json:"user_id"`
         Email  string `json:"email"`
         Role   string `json:"role"`
         jwt.RegisteredClaims

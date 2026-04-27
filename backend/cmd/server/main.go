@@ -37,8 +37,8 @@ func main() {
         // Recovery middleware (catch panics)
         app.Use(recover.New())
 
-        // Setup routes
-        routes.Setup(app, db)
+        // Setup routes — pass db and hub as explicit dependencies
+        routes.Setup(app, db, services.Hub)
 
         // Start server
         port := config.Cfg.App.Port

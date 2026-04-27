@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -25,27 +25,22 @@ import {
   User,
   CheckCircle2,
   Ticket,
-  Copy,
+  Loader2,
 } from "lucide-react";
-import {
-  formatRupiah,
-  type Attendee,
-  type OrderItem,
-  type Order,
-  type Ticket as TicketType,
-  mockEvent,
-  mockUser,
-  getAvailableQuota,
-  getQuotaPercentage,
-} from "@/lib/mock-data";
+import { formatRupiah } from "@/lib/utils";
+import type { IOrder, IOrderItem, ITicketType, IEvent } from "@/lib/types";
 import { useAuthStore } from "@/lib/auth-store";
 import { usePageStore } from "@/lib/page-store";
 import { useToast } from "@/hooks/use-toast";
-import { useCreateOrder } from "@/hooks/use-api";
+import { useCreateOrder, useTicketTypes, useEvent } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
 
 const STEPS = ["Pilih Tiket", "Data Peserta", "Konfirmasi & Bayar"];
 
+// ─── Fallback event slug ──────────────────────────────────────────
+const EVENT_SLUG = "sheila-on7-jakarta";
+
+// ─── Local types ──────────────────────────────────────────────────
 interface TicketSelection {
   [ticketTypeId: string]: number;
 }
@@ -57,31 +52,61 @@ interface AttendeeFormData {
   sameAsFirst: boolean;
 }
 
+// ─── Helper functions ─────────────────────────────────────────────
+function getAvailableQuota(tt: ITicketType): number {
+  return Math.max(0, tt.quota - tt.sold);
+}
+
+function getQuotaPercentage(tt: ITicketType): number {
+  if (tt.quota === 0) return 0;
+  return Math.round((tt.sold / tt.quota) * 100);
+}
+
+// ─── Local display type for order items in checkout ───────────────
+interface LocalOrderItem {
+  ticketTypeId: string;
+  ticketTypeName: string;
+  quantity: number;
+  price: number;
+  subtotal: number;
+}
+
 export default function CheckoutPage() {
   const { navigateTo } = usePageStore();
-  const { addOrder, user } = useAuthStore();
+  const { user } = useAuthStore();
   const { toast } = useToast();
+  const createOrder = useCreateOrder();
+
+  // ─── Fetch event and ticket types ───────────────────────────
+  const { data: eventData } = useEvent(EVENT_SLUG);
+  const event = (eventData as { event?: IEvent } | null)?.event ?? null;
+
+  // Derive event ID from fetched event or fallback
+  const eventId = event?.id || "event-jkt-001";
+  const { data: ticketTypesData, isLoading: ticketTypesLoading } = useTicketTypes(eventId);
+  const ticketTypes: ITicketType[] = Array.isArray(ticketTypesData) ? ticketTypesData : [];
 
   const [step, setStep] = useState(0);
   const [selections, setSelections] = useState<TicketSelection>({});
   const [attendees, setAttendees] = useState<AttendeeFormData[]>([]);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // ─── Derived data ──────────────────────────────────────────────
-  const selectedItems = useMemo<OrderItem[]>(() => {
+  const selectedItems = useMemo<LocalOrderItem[]>(() => {
     return Object.entries(selections)
       .filter(([, qty]) => qty > 0)
       .map(([ticketTypeId, quantity]) => {
-        const tt = mockEvent.ticketTypes.find((t) => t.id === ticketTypeId)!;
+        const tt = ticketTypes.find((t) => t.id === ticketTypeId);
         return {
           ticketTypeId,
-          ticketTypeName: tt.name,
+          ticketTypeName: tt?.name || "Unknown",
           quantity,
-          price: tt.price,
-          subtotal: tt.price * quantity,
+          price: tt?.price || 0,
+          subtotal: (tt?.price || 0) * quantity,
         };
       });
-  }, [selections]);
+  }, [selections, ticketTypes]);
 
   const totalTickets = useMemo(
     () => Object.values(selections).reduce((sum, qty) => sum + qty, 0),
@@ -106,7 +131,7 @@ export default function CheckoutPage() {
       if (newQty < 0) return prev;
       if (totalOther + newQty > 5) return prev;
 
-      const tt = mockEvent.ticketTypes.find((t) => t.id === ticketTypeId);
+      const tt = ticketTypes.find((t) => t.id === ticketTypeId);
       if (tt && newQty > getAvailableQuota(tt)) return prev;
 
       return { ...prev, [ticketTypeId]: newQty };
@@ -128,7 +153,7 @@ export default function CheckoutPage() {
           initialAttendees.push({
             name: i === 0 && user ? user.name : "",
             email: i === 0 && user ? user.email : "",
-            phone: i === 0 && user ? user.phone : "",
+            phone: i === 0 && user ? user.phone || "" : "",
             sameAsFirst: initialAttendees.length > 0,
           });
         }
@@ -168,53 +193,55 @@ export default function CheckoutPage() {
         toast({ title: "Setujui syarat dan ketentuan", variant: "destructive" });
         return;
       }
-      // Create order
-      const resolvedAttendees: Attendee[] = attendees.map((a) => {
+      // Create order via API
+      handleCreateOrder();
+    }
+  };
+
+  const handleCreateOrder = async () => {
+    setIsSubmitting(true);
+    try {
+      // Build order items with attendee info
+      const resolvedAttendees = attendees.map((a) => {
         const data = a.sameAsFirst ? attendees[0] : a;
         return {
           name: data.name,
           email: data.email,
           phone: data.phone,
-          ticketTypeId: "", // will be filled below
+          ticketTypeId: "",
         };
       });
 
       // Assign ticket types to attendees
       let attendeeIdx = 0;
+      const orderItems: { ticketTypeId: string; quantity: number; attendeeName: string; attendeeEmail: string }[] = [];
+
       selectedItems.forEach((item) => {
         for (let i = 0; i < item.quantity; i++) {
-          if (resolvedAttendees[attendeeIdx]) {
-            resolvedAttendees[attendeeIdx].ticketTypeId = item.ticketTypeId;
-          }
+          const attendee = resolvedAttendees[attendeeIdx];
+          orderItems.push({
+            ticketTypeId: item.ticketTypeId,
+            quantity: 1,
+            attendeeName: attendee?.name || "",
+            attendeeEmail: attendee?.email || "",
+          });
           attendeeIdx++;
         }
       });
 
-      const orderCode = `SEL-JKT-${Date.now().toString(36).toUpperCase()}`;
-      const now = new Date();
-      const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      const result = await createOrder.mutateAsync({
+        eventId,
+        items: orderItems,
+      });
 
-      const order: Order = {
-        id: `order-${Date.now()}`,
-        orderCode,
-        userId: user?.id || mockUser.id,
-        eventId: mockEvent.id,
-        eventTitle: mockEvent.title,
-        eventDate: mockEvent.date,
-        eventCity: mockEvent.venue.city,
-        items: selectedItems,
-        attendees: resolvedAttendees,
-        totalAmount,
-        status: "pending",
-        paymentMethod: "QRIS - BCA",
-        createdAt: now.toISOString(),
-        expiresAt: expiresAt.toISOString(),
-        tickets: [],
-      };
-
-      addOrder(order);
+      const order = result as IOrder;
       toast({ title: "Pesanan berhasil dibuat!" });
       navigateTo("payment", order.id);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Gagal membuat pesanan";
+      toast({ title: message, variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -274,126 +301,149 @@ export default function CheckoutPage() {
   );
 
   // ─── Render: Step 1 - Pilih Tiket ──────────────────────────────
-  const renderStep1 = () => (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-lg font-semibold text-white">Pilih Tiket</h2>
-        <Badge variant="outline" className="text-green-400 border-green-500/50">
-          <Ticket className="w-3 h-3 mr-1" />
-          {totalTickets}/5 tiket
-        </Badge>
-      </div>
+  const renderStep1 = () => {
+    if (ticketTypesLoading) {
+      return (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 text-green-400 animate-spin" />
+          <span className="ml-3 text-gray-400">Memuat tiket...</span>
+        </div>
+      );
+    }
 
-      {mockEvent.ticketTypes.map((tt) => {
-        const qty = selections[tt.id] || 0;
-        const available = getAvailableQuota(tt);
-        const soldPct = getQuotaPercentage(tt);
+    if (ticketTypes.length === 0) {
+      return (
+        <Card className="bg-[#16161D] border-[#2A2A35]">
+          <CardContent className="py-16 text-center">
+            <Ticket className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+            <p className="text-gray-400">Tiket belum tersedia</p>
+            <p className="text-gray-600 text-sm mt-1">Coba lagi nanti</p>
+          </CardContent>
+        </Card>
+      );
+    }
 
-        return (
-          <Card
-            key={tt.id}
-            className={cn(
-              "bg-[#16161D] border-[#2A2A35] transition-all",
-              qty > 0 && "border-green-500/50 ring-1 ring-green-500/20"
-            )}
-          >
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">{tt.emoji}</span>
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-lg font-semibold text-white">Pilih Tiket</h2>
+          <Badge variant="outline" className="text-green-400 border-green-500/50">
+            <Ticket className="w-3 h-3 mr-1" />
+            {totalTickets}/5 tiket
+          </Badge>
+        </div>
+
+        {ticketTypes.map((tt) => {
+          const qty = selections[tt.id] || 0;
+          const available = getAvailableQuota(tt);
+          const soldPct = getQuotaPercentage(tt);
+
+          return (
+            <Card
+              key={tt.id}
+              className={cn(
+                "bg-[#16161D] border-[#2A2A35] transition-all",
+                qty > 0 && "border-green-500/50 ring-1 ring-green-500/20"
+              )}
+            >
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">{tt.emoji || "🎫"}</span>
+                    <div>
+                      <CardTitle className="text-white text-base">
+                        {tt.name}
+                      </CardTitle>
+                      <CardDescription className="text-gray-400 text-sm">
+                        {tt.description}
+                      </CardDescription>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-green-400 font-bold text-lg">
+                      {formatRupiah(tt.price)}
+                    </p>
+                    <p className="text-gray-500 text-xs">/tiket</p>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-white text-base">
-                      {tt.name}
-                    </CardTitle>
-                    <CardDescription className="text-gray-400 text-sm">
-                      {tt.description}
-                    </CardDescription>
+                    {available === 0 ? (
+                      <Badge variant="destructive" className="text-xs">
+                        Habis Terjual
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-xs",
+                          soldPct >= 80
+                            ? "text-yellow-400 border-yellow-500/50"
+                            : "text-green-400 border-green-500/50"
+                        )}
+                      >
+                        Sisa {available}
+                      </Badge>
+                    )}
+                    <div className="flex gap-1 mt-1">
+                      {tt.benefits?.slice(0, 3).map((b) => (
+                        <span key={b} className="text-[10px] text-gray-500">
+                          {b}
+                          {b !== tt.benefits?.slice(0, 3).at(-1) && " •"}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-green-400 font-bold text-lg">
-                    {formatRupiah(tt.price)}
-                  </p>
-                  <p className="text-gray-500 text-xs">/tiket</p>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <div>
-                  {available === 0 ? (
-                    <Badge variant="destructive" className="text-xs">
-                      Habis Terjual
-                    </Badge>
-                  ) : (
-                    <Badge
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="icon"
                       variant="outline"
-                      className={cn(
-                        "text-xs",
-                        soldPct >= 80
-                          ? "text-yellow-400 border-yellow-500/50"
-                          : "text-green-400 border-green-500/50"
-                      )}
+                      className="w-8 h-8 border-[#2A2A35] hover:border-green-500 text-white"
+                      onClick={() => updateQty(tt.id, -1)}
+                      disabled={qty === 0}
                     >
-                      Sisa {available}
-                    </Badge>
-                  )}
-                  <div className="flex gap-1 mt-1">
-                    {tt.benefits.slice(0, 3).map((b) => (
-                      <span key={b} className="text-[10px] text-gray-500">
-                        {b}
-                        {b !== tt.benefits.slice(0, 3).at(-1) && " •"}
-                      </span>
-                    ))}
+                      <Minus className="w-4 h-4" />
+                    </Button>
+                    <span className="w-8 text-center text-white font-bold text-lg">
+                      {qty}
+                    </span>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="w-8 h-8 border-[#2A2A35] hover:border-green-500 text-white"
+                      onClick={() => updateQty(tt.id, 1)}
+                      disabled={available === 0 || totalTickets >= 5}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    className="w-8 h-8 border-[#2A2A35] hover:border-green-500 text-white"
-                    onClick={() => updateQty(tt.id, -1)}
-                    disabled={qty === 0}
-                  >
-                    <Minus className="w-4 h-4" />
-                  </Button>
-                  <span className="w-8 text-center text-white font-bold text-lg">
-                    {qty}
-                  </span>
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    className="w-8 h-8 border-[#2A2A35] hover:border-green-500 text-white"
-                    onClick={() => updateQty(tt.id, 1)}
-                    disabled={available === 0 || totalTickets >= 5}
-                  >
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
+              </CardContent>
+            </Card>
+          );
+        })}
 
-      {/* Running total */}
-      <Card className="bg-[#0B0B0F] border-green-500/30">
-        <CardContent className="py-4">
-          <div className="flex items-center justify-between">
-            <span className="text-gray-400">Total</span>
-            <div className="text-right">
-              <span className="text-green-400 font-bold text-xl">
-                {formatRupiah(totalAmount)}
-              </span>
-              <p className="text-gray-500 text-xs">
-                {totalTickets} tiket
-              </p>
+        {/* Running total */}
+        <Card className="bg-[#0B0B0F] border-green-500/30">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-400">Total</span>
+              <div className="text-right">
+                <span className="text-green-400 font-bold text-xl">
+                  {formatRupiah(totalAmount)}
+                </span>
+                <p className="text-gray-500 text-xs">
+                  {totalTickets} tiket
+                </p>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
 
   // ─── Render: Step 2 - Data Peserta ─────────────────────────────
   const renderStep2 = () => (
@@ -410,7 +460,7 @@ export default function CheckoutPage() {
           .slice(0, index)
           .filter((a) => !a.sameAsFirst || index === 0).length;
         const ttId = selectedItems[ticketIdx]?.ticketTypeId;
-        const tt = mockEvent.ticketTypes.find((t) => t.id === ttId);
+        const tt = ticketTypes.find((t) => t.id === ttId);
 
         return (
           <Card
@@ -428,7 +478,7 @@ export default function CheckoutPage() {
                         variant="outline"
                         className="ml-2 text-green-400 border-green-500/50 text-xs"
                       >
-                        {tt.emoji} {tt.name}
+                        {tt.emoji || "🎫"} {tt.name}
                       </Badge>
                     )}
                   </CardTitle>
@@ -548,12 +598,12 @@ export default function CheckoutPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="bg-[#0B0B0F] rounded-lg p-3 space-y-1">
-            <p className="text-white font-semibold">{mockEvent.title}</p>
+            <p className="text-white font-semibold">{event?.title || "Sheila On 7 — JAKARTA"}</p>
             <p className="text-gray-400 text-sm">
-              {mockEvent.day}, {mockEvent.date} • {mockEvent.time}
+              {event?.date || "2026-04-25"} • {event?.doorsOpen || "16:00 WIB"}
             </p>
             <p className="text-gray-400 text-sm">
-              📍 {mockEvent.venue.name}, {mockEvent.venue.city}
+              📍 {event?.venue || "GBK Madya Stadium"}, {event?.city || "Jakarta"}
             </p>
           </div>
 
@@ -598,7 +648,7 @@ export default function CheckoutPage() {
                 .slice(0, i)
                 .filter((at) => !at.sameAsFirst || i === 0).length
             ]?.ticketTypeId;
-            const tt = mockEvent.ticketTypes.find((t) => t.id === ttId);
+            const tt = ticketTypes.find((t) => t.id === ttId);
             return (
               <div
                 key={i}
@@ -643,11 +693,21 @@ export default function CheckoutPage() {
                 yang berlaku
               </Label>
               <div className="mt-2 max-h-32 overflow-y-auto rounded-lg bg-[#0B0B0F] p-3">
-                {mockEvent.terms.map((term, i) => (
-                  <p key={i} className="text-xs text-gray-500 mb-1">
-                    {i + 1}. {term}
-                  </p>
-                ))}
+                <p className="text-xs text-gray-500 mb-1">
+                  1. Tiket yang sudah dibeli tidak dapat dikembalikan (non-refundable).
+                </p>
+                <p className="text-xs text-gray-500 mb-1">
+                  2. Wajib membawa identitas sesuai data pemesanan.
+                </p>
+                <p className="text-xs text-gray-500 mb-1">
+                  3. Pembayaran harus diselesaikan sebelum batas waktu.
+                </p>
+                <p className="text-xs text-gray-500 mb-1">
+                  4. E-tiket akan tersedia setelah pembayaran berhasil diverifikasi.
+                </p>
+                <p className="text-xs text-gray-500">
+                  5. Penyelenggara berhak menolak masuk jika data tidak sesuai.
+                </p>
               </div>
             </div>
           </div>
@@ -712,8 +772,14 @@ export default function CheckoutPage() {
             <Button
               className="bg-green-500 hover:bg-green-600 text-white"
               onClick={goNext}
+              disabled={isSubmitting}
             >
-              {step === STEPS.length - 1 ? (
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                  Memproses...
+                </>
+              ) : step === STEPS.length - 1 ? (
                 <>
                   <CheckCircle2 className="w-4 h-4 mr-1" />
                   Konfirmasi & Bayar

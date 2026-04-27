@@ -3,6 +3,7 @@ package services
 import (
         "errors"
         "fmt"
+        "log"
         "math/rand"
         "time"
 
@@ -151,10 +152,12 @@ func (s *OrderService) CreateOrder(userID string, eventID string, items []OrderI
 }
 
 // ProcessPaymentCallback processes a Midtrans payment callback.
-// It updates the order status and generates tickets if payment is successful.
+// It updates the order status and generates/activates tickets if payment is successful.
+// If tickets already exist with "pending" status, they are updated to "active".
+// If no tickets exist yet, they are created with "active" status.
 func (s *OrderService) ProcessPaymentCallback(orderCode string, paymentType string, transactionStatus string, midtransTxID string) error {
         var order models.Order
-        if err := s.DB.Preload("Items").Where("order_code = ?", orderCode).First(&order).Error; err != nil {
+        if err := s.DB.Preload("Items").Preload("Items.TicketType").Preload("Tickets").Where("order_code = ?", orderCode).First(&order).Error; err != nil {
                 return fmt.Errorf("order not found: %w", err)
         }
 
@@ -189,51 +192,63 @@ func (s *OrderService) ProcessPaymentCallback(orderCode string, paymentType stri
                         return fmt.Errorf("failed to update order status to paid: %w", err)
                 }
 
-                // Generate tickets for each order item
-                for _, item := range order.Items {
-                        for i := 0; i < item.Quantity; i++ {
-                                ticketCode := generateTicketCode()
-                                qrData := ticketCode // QR data is the ticket code itself
+                // Check if tickets already exist (created as "pending" during order creation)
+                if len(order.Tickets) > 0 {
+                        // Update all pending tickets to active
+                        if err := tx.Model(&models.Ticket{}).
+                                Where("order_id = ? AND status = ?", order.ID, "pending").
+                                Update("status", "active").Error; err != nil {
+                                tx.Rollback()
+                                return fmt.Errorf("failed to activate pending tickets: %w", err)
+                        }
+                        log.Printf("[Order] Activated %d pending tickets for order %s", len(order.Tickets), order.OrderCode)
+                } else {
+                        // Generate tickets for each order item (no pre-existing tickets)
+                        for _, item := range order.Items {
+                                for i := 0; i < item.Quantity; i++ {
+                                        ticketCode := generateTicketCode()
+                                        qrData := ticketCode
 
-                                // Try to determine attendee info from order's user
-                                var user models.User
-                                if err := s.DB.Where("id = ?", order.UserID).First(&user).Error; err == nil {
-                                        // Use order user info as fallback
-                                }
-
-                                attendeeName := user.Name
-                                attendeeEmail := user.Email
-
-                                // Load ticket type to check for seat config
-                                var ticketType models.TicketType
-                                s.DB.Where("id = ?", item.TicketTypeID).First(&ticketType)
-
-                                var seatLabel *string
-                                if ticketType.SeatConfig != nil {
-                                        // Generate a simple seat label based on index
-                                        zone := "Z"
-                                        if ticketType.Zone != nil {
-                                                zone = *ticketType.Zone
+                                        // Get attendee info from order's user
+                                        var user models.User
+                                        if err := s.DB.Where("id = ?", order.UserID).First(&user).Error; err != nil {
+                                                log.Printf("[Order] Warning: could not load user for ticket generation: %v", err)
                                         }
-                                        label := fmt.Sprintf("%s-%d", zone, i+1)
-                                        seatLabel = &label
-                                }
 
-                                ticket := models.Ticket{
-                                        OrderID:      order.ID,
-                                        TicketTypeID: item.TicketTypeID,
-                                        TicketCode:   ticketCode,
-                                        AttendeeName: attendeeName,
-                                        AttendeeEmail: attendeeEmail,
-                                        QrData:       qrData,
-                                        Status:       "active",
-                                        SeatLabel:    seatLabel,
-                                }
-                                if err := tx.Create(&ticket).Error; err != nil {
-                                        tx.Rollback()
-                                        return fmt.Errorf("failed to create ticket: %w", err)
+                                        attendeeName := user.Name
+                                        attendeeEmail := user.Email
+
+                                        // Load ticket type to check for seat config
+                                        var ticketType models.TicketType
+                                        s.DB.Where("id = ?", item.TicketTypeID).First(&ticketType)
+
+                                        var seatLabel *string
+                                        if ticketType.SeatConfig != nil {
+                                                zone := "Z"
+                                                if ticketType.Zone != nil {
+                                                        zone = *ticketType.Zone
+                                                }
+                                                label := fmt.Sprintf("%s-%d", zone, i+1)
+                                                seatLabel = &label
+                                        }
+
+                                        ticket := models.Ticket{
+                                                OrderID:       order.ID,
+                                                TicketTypeID:  item.TicketTypeID,
+                                                TicketCode:    ticketCode,
+                                                AttendeeName:  attendeeName,
+                                                AttendeeEmail: attendeeEmail,
+                                                QrData:        qrData,
+                                                Status:        "active",
+                                                SeatLabel:     seatLabel,
+                                        }
+                                        if err := tx.Create(&ticket).Error; err != nil {
+                                                tx.Rollback()
+                                                return fmt.Errorf("failed to create ticket: %w", err)
+                                        }
                                 }
                         }
+                        log.Printf("[Order] Created tickets for order %s", order.OrderCode)
                 }
 
         case "deny", "cancel":
@@ -244,6 +259,10 @@ func (s *OrderService) ProcessPaymentCallback(orderCode string, paymentType stri
                         tx.Rollback()
                         return fmt.Errorf("failed to update order status to cancelled: %w", err)
                 }
+                // Update any pending tickets to cancelled
+                tx.Model(&models.Ticket{}).
+                        Where("order_id = ? AND status = ?", order.ID, "pending").
+                        Update("status", "cancelled")
                 // Restore ticket type sold counts
                 for _, item := range order.Items {
                         tx.Model(&models.TicketType{}).Where("id = ?", item.TicketTypeID).
@@ -258,6 +277,10 @@ func (s *OrderService) ProcessPaymentCallback(orderCode string, paymentType stri
                         tx.Rollback()
                         return fmt.Errorf("failed to update order status to expired: %w", err)
                 }
+                // Update any pending tickets to expired
+                tx.Model(&models.Ticket{}).
+                        Where("order_id = ? AND status = ?", order.ID, "pending").
+                        Update("status", "expired")
                 // Restore ticket type sold counts
                 for _, item := range order.Items {
                         tx.Model(&models.TicketType{}).Where("id = ?", item.TicketTypeID).
@@ -275,6 +298,7 @@ func (s *OrderService) ProcessPaymentCallback(orderCode string, paymentType stri
 
         default:
                 // Unknown status, log but don't error
+                log.Printf("[Order] Unknown transaction status: %s for order %s", transactionStatus, order.OrderCode)
         }
 
         if err := tx.Commit().Error; err != nil {

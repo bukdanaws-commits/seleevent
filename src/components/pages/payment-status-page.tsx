@@ -11,130 +11,85 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Progress } from "@/components/ui/progress";
 import {
   ArrowLeft,
   Clock,
   CheckCircle2,
   XCircle,
-  Upload,
   Ticket,
   FileCheck,
   ShieldCheck,
   Loader2,
   PartyPopper,
-  RotateCcw,
   Home,
 } from "lucide-react";
 import { formatRupiah } from "@/lib/utils";
-import type { Order } from "@/lib/mock-data";
-import { useAuthStore } from "@/lib/auth-store";
+import type { IOrder, IPaymentStatus } from "@/lib/types";
 import { usePageStore } from "@/lib/page-store";
 import { cn } from "@/lib/utils";
-import { usePaymentStatus } from "@/hooks/use-api";
+import { useOrderDetail, usePaymentStatus } from "@/hooks/use-api";
 
 const TIMELINE_STEPS = [
   { label: "Pesanan dibuat", icon: Ticket },
-  { label: "Bukti diupload", icon: Upload },
-  { label: "Menunggu verifikasi", icon: Clock },
+  { label: "Menunggu pembayaran", icon: Clock },
+  { label: "Pembayaran diproses", icon: Clock },
   { label: "Pembayaran diverifikasi", icon: FileCheck },
   { label: "E-tiket diterbitkan", icon: ShieldCheck },
 ];
 
 export default function PaymentStatusPage() {
   const { currentOrderId, navigateTo } = usePageStore();
-  const { getOrder, updateOrder } = useAuthStore();
-  const order = getOrder(currentOrderId || "");
 
-  // Use API hook for payment status polling
+  // ─── Fetch order detail and payment status from API ────────────
+  const { data: order, isLoading: orderLoading } = useOrderDetail(currentOrderId || "");
   const { data: paymentStatusData } = usePaymentStatus(currentOrderId || "");
 
-  const [currentStep, setCurrentStep] = useState(1); // 0-4
-  const [pollCount, setPollCount] = useState(0);
-  const [isPolling, setIsPolling] = useState(true);
+  const typedOrder = order as IOrder | null;
+  const typedPaymentStatus = paymentStatusData as IPaymentStatus | null;
+
   const [showConfetti, setShowConfetti] = useState(false);
   const confettiRef = useRef<HTMLDivElement>(null);
 
-  // ─── Auto-polling simulation ───────────────────────────────────
-  useEffect(() => {
-    if (!order || !isPolling) return;
-
-    // Already paid
-    if (order.status === "paid") {
-      setCurrentStep(4);
-      setShowConfetti(true);
-      setIsPolling(false);
-      return;
+  // ─── Determine current step from order/payment status ──────────
+  const currentStep = (() => {
+    if (!typedOrder) return 0;
+    switch (typedOrder.status) {
+      case "pending":
+        if (typedPaymentStatus?.paymentType) return 2; // Payment initiated
+        return 1; // Awaiting payment
+      case "paid":
+        return 4; // E-tiket issued
+      case "refunded":
+      case "cancelled":
+        return 2; // Stopped at processing
+      case "expired":
+        return 1; // Expired before payment
+      default:
+        return 0;
     }
+  })();
 
-    // Start at step 1 (bukti uploaded)
-    setCurrentStep(1);
-
-    const interval = setInterval(() => {
-      setPollCount((prev) => {
-        const next = prev + 1;
-
-        // At ~15 seconds (3 polls at 5s), simulate verification success
-        if (next >= 3 && order.status === "pending") {
-          setIsPolling(false);
-          clearInterval(interval);
-
-          // Generate tickets
-          const tickets = order.items.flatMap((item) =>
-            Array.from({ length: item.quantity }, (_, i) => {
-              const idx = String(i + 1).padStart(4, "0");
-              const attendee = order.attendees.find(
-                (a) => a.ticketTypeId === item.ticketTypeId
-              );
-              return {
-                id: `tkt-${Date.now()}-${item.ticketTypeId}-${i}`,
-                ticketCode: `SEL-JKT-${item.ticketTypeName.toUpperCase()}-${idx}`,
-                orderItemId: item.ticketTypeId,
-                ticketTypeName: item.ticketTypeName,
-                attendeeName: attendee?.name || "Peserta",
-                attendeeEmail: attendee?.email || "",
-                status: "active" as const,
-                qrData: `SEL-JKT-${item.ticketTypeName.toUpperCase()}-${idx}|${attendee?.email || ""}|active`,
-              };
-            })
-          );
-
-          // Simulate rejection for order-002
-          if (order.id === "order-002") {
-            updateOrder(order.id, {
-              status: "rejected",
-              rejectionReason:
-                "Nominal transfer tidak sesuai. Silakan upload ulang bukti dengan nominal yang benar.",
-            });
-            setCurrentStep(2);
-          } else {
-            updateOrder(order.id, {
-              status: "paid",
-              paidAt: new Date().toISOString(),
-              tickets,
-            });
-            setCurrentStep(4);
-            setShowConfetti(true);
-          }
-
-          return next;
-        }
-
-        return next;
-      });
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [order, updateOrder, isPolling]);
-
-  // ─── Confetti effect ───────────────────────────────────────────
+  // ─── Confetti effect when paid ─────────────────────────────────
   useEffect(() => {
-    if (!showConfetti) return;
-    const timer = setTimeout(() => setShowConfetti(false), 5000);
-    return () => clearTimeout(timer);
-  }, [showConfetti]);
+    if (typedOrder?.status === "paid") {
+      setShowConfetti(true);
+      const timer = setTimeout(() => setShowConfetti(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [typedOrder?.status]);
 
-  if (!order) {
+  // ─── Loading state ─────────────────────────────────────────────
+  if (orderLoading) {
+    return (
+      <div className="min-h-screen bg-[#0B0B0F] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-green-400 animate-spin" />
+        <span className="ml-3 text-gray-400">Memuat status pesanan...</span>
+      </div>
+    );
+  }
+
+  // ─── Not found state ───────────────────────────────────────────
+  if (!typedOrder) {
     return (
       <div className="min-h-screen bg-[#0B0B0F] flex items-center justify-center">
         <p className="text-gray-500">Order tidak ditemukan</p>
@@ -142,8 +97,14 @@ export default function PaymentStatusPage() {
     );
   }
 
-  const isPaid = order.status === "paid";
-  const isRejected = order.status === "rejected";
+  const isPaid = typedOrder.status === "paid";
+  const isRefunded = typedOrder.status === "refunded";
+  const isCancelled = typedOrder.status === "cancelled";
+  const isExpired = typedOrder.status === "expired";
+  const isNegative = isRefunded || isCancelled || isExpired;
+
+  const eventTitle = typedOrder.event?.title || "Event";
+  const paymentMethod = typedOrder.paymentMethod || typedOrder.paymentType || "Midtrans";
 
   return (
     <div className="min-h-screen bg-[#0B0B0F]">
@@ -214,7 +175,7 @@ export default function PaymentStatusPage() {
                 E-tiket Anda sudah siap. Silakan cek tiket Anda.
               </p>
             </>
-          ) : isRejected ? (
+          ) : isRefunded || isCancelled ? (
             <>
               <div className="w-20 h-20 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4">
                 <XCircle className="w-10 h-10 text-red-500" />
@@ -223,8 +184,19 @@ export default function PaymentStatusPage() {
                 Pembayaran Ditolak
               </h2>
               <p className="text-gray-400 text-sm max-w-sm mx-auto">
-                {order.rejectionReason ||
-                  "Bukti pembayaran tidak valid. Silakan upload ulang."}
+                Pembayaran tidak dapat diverifikasi. Silakan coba lagi.
+              </p>
+            </>
+          ) : isExpired ? (
+            <>
+              <div className="w-20 h-20 rounded-full bg-gray-500/20 flex items-center justify-center mx-auto mb-4">
+                <Clock className="w-10 h-10 text-gray-500" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">
+                Pesanan Expired
+              </h2>
+              <p className="text-gray-400 text-sm max-w-sm mx-auto">
+                Batas waktu pembayaran telah habis. Silakan buat pesanan baru.
               </p>
             </>
           ) : (
@@ -233,17 +205,17 @@ export default function PaymentStatusPage() {
                 <Loader2 className="w-10 h-10 text-yellow-500 animate-spin" />
               </div>
               <h2 className="text-2xl font-bold text-white mb-2">
-                Menunggu Verifikasi
+                Menunggu Pembayaran
               </h2>
               <p className="text-gray-400 text-sm">
-                Pembayaran Anda sedang diverifikasi oleh tim kami
+                Silakan selesaikan pembayaran Anda
               </p>
               <Badge
                 variant="outline"
                 className="mt-3 text-yellow-400 border-yellow-500/50 animate-pulse"
               >
                 <Clock className="w-3 h-3 mr-1" />
-                Antrian #{pollCount + 1}
+                Menunggu
               </Badge>
             </>
           )}
@@ -313,7 +285,7 @@ export default function PaymentStatusPage() {
                       >
                         {step.label}
                       </p>
-                      {isActive && !isPaid && !isRejected && (
+                      {isActive && !isPaid && !isNegative && (
                         <p className="text-xs text-yellow-400/70 mt-0.5">
                           Sedang diproses...
                         </p>
@@ -335,25 +307,25 @@ export default function PaymentStatusPage() {
             <div className="flex items-center justify-between">
               <span className="text-gray-400 text-sm">Kode Pesanan</span>
               <span className="text-white font-mono text-sm">
-                {order.orderCode}
+                {typedOrder.orderCode}
               </span>
             </div>
             <Separator className="bg-[#2A2A35]" />
             <div className="flex items-center justify-between">
               <span className="text-gray-400 text-sm">Event</span>
-              <span className="text-white text-sm">{order.eventTitle}</span>
+              <span className="text-white text-sm">{eventTitle}</span>
             </div>
             <Separator className="bg-[#2A2A35]" />
             <div className="flex items-center justify-between">
               <span className="text-gray-400 text-sm">Total</span>
               <span className="text-green-400 font-bold">
-                {formatRupiah(order.totalAmount)}
+                {formatRupiah(typedOrder.totalAmount)}
               </span>
             </div>
             <Separator className="bg-[#2A2A35]" />
             <div className="flex items-center justify-between">
               <span className="text-gray-400 text-sm">Metode</span>
-              <span className="text-white text-sm">{order.paymentMethod}</span>
+              <span className="text-white text-sm">{paymentMethod}</span>
             </div>
           </CardContent>
         </Card>
@@ -371,8 +343,8 @@ export default function PaymentStatusPage() {
                 variant="outline"
                 className="text-green-400 border-green-500/50 text-xs shrink-0"
               >
-                {order.createdAt
-                  ? new Date(order.createdAt).toLocaleTimeString("id-ID", {
+                {typedOrder.createdAt
+                  ? new Date(typedOrder.createdAt).toLocaleTimeString("id-ID", {
                       hour: "2-digit",
                       minute: "2-digit",
                     })
@@ -380,27 +352,11 @@ export default function PaymentStatusPage() {
               </Badge>
               <span className="text-gray-300 text-sm">Pesanan dibuat</span>
             </div>
-            {order.proofUploadedAt && (
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant="outline"
-                  className="text-blue-400 border-blue-500/50 text-xs shrink-0"
-                >
-                  {new Date(order.proofUploadedAt).toLocaleTimeString("id-ID", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </Badge>
-                <span className="text-gray-300 text-sm">
-                  Bukti pembayaran diupload
-                </span>
-              </div>
-            )}
             {isPaid && (
               <div className="flex items-center gap-2">
                 <Badge className="bg-green-500/20 text-green-400 border-0 text-xs shrink-0">
-                  {order.paidAt
-                    ? new Date(order.paidAt).toLocaleTimeString("id-ID", {
+                  {typedOrder.paidAt
+                    ? new Date(typedOrder.paidAt).toLocaleTimeString("id-ID", {
                         hour: "2-digit",
                         minute: "2-digit",
                       })
@@ -411,7 +367,7 @@ export default function PaymentStatusPage() {
                 </span>
               </div>
             )}
-            {isRejected && (
+            {(isRefunded || isCancelled) && (
               <div className="flex items-center gap-2">
                 <Badge
                   variant="destructive"
@@ -424,6 +380,19 @@ export default function PaymentStatusPage() {
                 </span>
               </div>
             )}
+            {isExpired && (
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className="text-gray-500 border-gray-600 text-xs shrink-0"
+                >
+                  Expired
+                </Badge>
+                <span className="text-gray-300 text-sm">
+                  Batas waktu pembayaran habis
+                </span>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -432,19 +401,26 @@ export default function PaymentStatusPage() {
           {isPaid && (
             <Button
               className="w-full bg-green-500 hover:bg-green-600 text-white h-12 font-semibold"
-              onClick={() => navigateTo("eticket", order.id)}
+              onClick={() => navigateTo("eticket", typedOrder.id)}
             >
               <Ticket className="w-4 h-4 mr-2" />
               Lihat E-Tiket
             </Button>
           )}
-          {isRejected && (
+          {(isRefunded || isCancelled) && (
             <Button
               className="w-full bg-yellow-500 hover:bg-yellow-600 text-black h-12 font-semibold"
-              onClick={() => navigateTo("payment", order.id)}
+              onClick={() => navigateTo("payment", typedOrder.id)}
             >
-              <RotateCcw className="w-4 h-4 mr-2" />
-              Upload Ulang Bukti
+              Coba Bayar Lagi
+            </Button>
+          )}
+          {isExpired && (
+            <Button
+              className="w-full bg-green-500 hover:bg-green-600 text-white h-12 font-semibold"
+              onClick={() => navigateTo("checkout")}
+            >
+              Buat Pesanan Baru
             </Button>
           )}
           <Button

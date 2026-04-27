@@ -4,6 +4,7 @@
 
 'use client'
 
+import { useState, useEffect } from 'react'
 import {
   useQuery,
   useMutation,
@@ -23,6 +24,9 @@ import {
   type PaginatedData,
 } from '@/lib/api'
 
+import { useAuthStore } from '@/lib/auth-store'
+import { getSSEClient } from '@/lib/sse'
+
 import type {
   IUser,
   IEvent,
@@ -39,6 +43,7 @@ import type {
   IRedeemTicketResponse,
   IGateScanRequest,
   IGateScanResponse,
+  ISSEEvent,
 } from '@/lib/types'
 
 // ─── QUERY KEY FACTORY ────────────────────────────────────────────────────
@@ -51,6 +56,7 @@ export const queryKeys = {
 
   // Public
   events: {
+    all: ['events', 'all'] as const,
     detail: (slug: string) => ['events', 'detail', slug] as const,
     ticketTypes: (eventId: string) => ['events', 'ticketTypes', eventId] as const,
   },
@@ -117,11 +123,28 @@ export const queryKeys = {
   notifications: {
     list: (params?: Record<string, string>) => ['notifications', 'list', params] as const,
   },
+
+  // SSE
+  sse: {
+    status: () => ['sse', 'status'] as const,
+  },
 }
 
 // ─── AUTH HOOKS ────────────────────────────────────────────────────────────
 
+/**
+ * useAuth() — wraps the auth Zustand store for easy access in components
+ * Returns the full auth store state and actions
+ */
 export function useAuth() {
+  return useAuthStore()
+}
+
+/**
+ * useAuthQuery() — React Query hook for fetching current user profile
+ * Use this for components that need to refetch/invalidate auth state
+ */
+export function useAuthQuery() {
   return useQuery({
     queryKey: queryKeys.auth.me,
     queryFn: () => authApi.getMe(),
@@ -153,6 +176,16 @@ export function useLogout() {
 
 // ─── EVENT HOOKS ───────────────────────────────────────────────────────────
 
+/**
+ * useEvents() — fetches all available events
+ */
+export function useEvents(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: queryKeys.admin.events(params),
+    queryFn: () => adminApi.getEvents(params),
+  })
+}
+
 export function useEvent(slug: string) {
   return useQuery({
     queryKey: queryKeys.events.detail(slug),
@@ -181,11 +214,19 @@ export function useCreateOrder() {
   })
 }
 
-export function useUserOrders(params?: Record<string, string>) {
+/**
+ * useOrders() — fetches user orders with optional params
+ */
+export function useOrders(params?: Record<string, string>) {
   return useQuery({
     queryKey: queryKeys.orders.list(params),
     queryFn: () => orderApi.getUserOrders(params),
   })
+}
+
+// Alias for backward compatibility
+export function useUserOrders(params?: Record<string, string>) {
+  return useOrders(params)
 }
 
 export function useOrderDetail(orderId: string) {
@@ -234,6 +275,43 @@ export function usePaymentStatus(orderId: string) {
       return 5000 // Poll every 5 seconds while pending
     },
   })
+}
+
+// ─── SSE HOOK ──────────────────────────────────────────────────────────────
+
+/**
+ * useSSE() — connects to SSE stream and returns connection status
+ * Automatically reconnects using the SSE client singleton
+ */
+export function useSSE() {
+  const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected')
+  const [lastEvent, setLastEvent] = useState<ISSEEvent | null>(null)
+
+  useEffect(() => {
+    const sse = getSSEClient()
+
+    // Subscribe to status changes — the subscription callback will update state
+    const unsubStatus = sse.onStatusChange((newStatus) => {
+      setStatus(newStatus)
+    })
+
+    // Subscribe to all events
+    const unsubEvents = sse.on('*', (event: MessageEvent) => {
+      try {
+        const parsed = JSON.parse(event.data)
+        setLastEvent(parsed as ISSEEvent)
+      } catch {
+        // Ignore malformed events
+      }
+    })
+
+    return () => {
+      unsubStatus()
+      unsubEvents()
+    }
+  }, [])
+
+  return { status, lastEvent }
 }
 
 // ─── COUNTER HOOKS ─────────────────────────────────────────────────────────
