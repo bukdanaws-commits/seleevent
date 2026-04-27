@@ -1,0 +1,92 @@
+# =============================================================================
+#  Cloud Build Configuration — EVENTKU Next.js Frontend
+#
+#  Triggers:
+#    - Push to main branch (frontend files)
+#    - Manual: gcloud builds submit --config gcp/cloudbuild-frontend.yaml \
+#              --substitutions=_BACKEND_URL=https://your-api-url.run.app
+# =============================================================================
+
+steps:
+  # ── Install dependencies ──────────────────────────────────────────────────
+  - name: 'node:20-alpine'
+    id: 'install-deps'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        npm install -g bun
+        echo "📦 Installing dependencies..."
+        bun install --frozen-lockfile
+        echo "✅ Dependencies installed"
+
+  # ── Build Next.js application ─────────────────────────────────────────────
+  - name: 'node:20-alpine'
+    id: 'build-nextjs'
+    entrypoint: 'sh'
+    env:
+      - 'NEXT_PUBLIC_API_URL=$_BACKEND_URL'
+      - 'NEXT_PUBLIC_GO_PORT=8080'
+      - 'NEXT_PUBLIC_USE_DIRECT_BACKEND=true'
+      - 'NODE_ENV=production'
+    args:
+      - '-c'
+      - |
+        echo "🔨 Building Next.js..."
+        echo "   API URL: $NEXT_PUBLIC_API_URL"
+        bun run build
+        echo "✅ Next.js build complete"
+
+  # ── Build Docker image ────────────────────────────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-image'
+    args:
+      - 'build'
+      - '-t'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/docker/eventku-web:$COMMIT_SHA'
+      - '-t'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/docker/eventku-web:latest'
+      - '-f'
+      - 'Dockerfile.frontend'
+      - '--build-arg=NEXT_PUBLIC_API_URL=$_BACKEND_URL'
+      - '--build-arg=NEXT_PUBLIC_GO_PORT=8080'
+      - '--build-arg=NEXT_PUBLIC_USE_DIRECT_BACKEND=true'
+      - '.'
+
+  # ── Push to Artifact Registry ─────────────────────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-image'
+    args: ['push', '--all-tags', '$_REGION-docker.pkg.dev/$PROJECT_ID/docker/eventku-web']
+
+  # ── Deploy to Cloud Run ───────────────────────────────────────────────────
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'deploy'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'eventku-web'
+      - '--image=$_REGION-docker.pkg.dev/$PROJECT_ID/docker/eventku-web:$COMMIT_SHA'
+      - '--region=$_REGION'
+      - '--platform=managed'
+      - '--cpu=1'
+      - '--memory=512Mi'
+      - '--min-instances=0'
+      - '--max-instances=5'
+      - '--concurrency=80'
+      - '--timeout=300'
+      - '--port=3000'
+      - '--allow-unauthenticated'
+
+# ── Default substitution values ─────────────────────────────────────────────
+substitutions:
+  _REGION: asia-southeast1
+  _PROJECT_ID: eventku-494416
+  _BACKEND_URL: https://eventku-api-xxxxx-xx.a.run.app
+
+# ── Build options ───────────────────────────────────────────────────────────
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+
+timeout: '1800s'

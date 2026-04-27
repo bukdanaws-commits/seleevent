@@ -1,0 +1,67 @@
+# =============================================================================
+#  EVENTKU — Next.js Frontend Docker Image for Cloud Run
+#
+#  Build:  docker build -f Dockerfile.frontend -t eventku-web .
+#  Run:    docker run -p 3000:3000 eventku-web
+#
+#  Requires: output: 'standalone' in next.config.ts (already configured)
+# =============================================================================
+
+# ── Build stage ─────────────────────────────────────────────────────────────
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+# Install bun for faster dependency installation
+RUN npm install -g bun
+
+# Copy dependency manifests first for better layer caching
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+
+# Copy all source files
+COPY . .
+
+# Build-time environment variables (baked into the build)
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_GO_PORT=8080
+ARG NEXT_PUBLIC_USE_DIRECT_BACKEND=true
+
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_GO_PORT=$NEXT_PUBLIC_GO_PORT
+ENV NEXT_PUBLIC_USE_DIRECT_BACKEND=$NEXT_PUBLIC_USE_DIRECT_BACKEND
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Build the Next.js application (standalone output)
+RUN bun run build
+
+# ── Runtime stage ───────────────────────────────────────────────────────────
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Create non-root user for security
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Copy built standalone output
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# Switch to non-root user
+USER nextjs
+
+# Cloud Run expects the app to listen on PORT
+EXPOSE 3000
+
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+# Health check for Cloud Run
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
+
+# Start the Next.js server
+CMD ["node", "server.js"]
