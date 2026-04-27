@@ -27,7 +27,9 @@ import {
   Send,
   Camera,
 } from "lucide-react";
-import { formatRupiah, formatDateTime } from "@/lib/mock-data";
+import { formatRupiah, formatDateTime } from "@/lib/utils";
+import { useCreatePayment, usePaymentStatus } from "@/hooks/use-api";
+import { loadMidtransSnap } from "@/lib/midtrans";
 import { useAuthStore } from "@/lib/auth-store";
 import { usePageStore } from "@/lib/page-store";
 import { useToast } from "@/hooks/use-toast";
@@ -37,6 +39,7 @@ export default function PaymentPage() {
   const { currentOrderId, navigateTo } = usePageStore();
   const { getOrder, updateOrder } = useAuthStore();
   const { toast } = useToast();
+  const createPayment = useCreatePayment();
 
   const order = getOrder(currentOrderId || "");
   const [uploadedFile, setUploadedFile] = useState<string | null>(null);
@@ -127,19 +130,42 @@ export default function PaymentPage() {
   };
 
   // ─── Submit ────────────────────────────────────────────────────
-  const handleSubmit = () => {
-    if (!uploadedFile) {
-      toast({ title: "Upload bukti pembayaran", variant: "destructive" });
-      return;
-    }
+  const handleSubmit = async () => {
     if (!order) return;
 
-    updateOrder(order.id, {
-      status: "pending",
-      proofUploadedAt: new Date().toISOString(),
-    });
-    toast({ title: "Bukti berhasil diupload!" });
-    navigateTo("payment-status", order.id);
+    try {
+      // Use Midtrans Snap for payment
+      const result = await createPayment.mutateAsync({
+        orderId: order.id,
+        paymentType: 'qris',
+      }) as { token: string; redirectUrl?: string };
+
+      await loadMidtransSnap();
+
+      if (window.snap && result.token) {
+        window.snap.pay(result.token, {
+          onSuccess: () => {
+            toast({ title: "Pembayaran berhasil!" });
+            navigateTo("payment-status", order.id);
+          },
+          onPending: () => {
+            toast({ title: "Pembayaran menunggu konfirmasi" });
+            navigateTo("payment-status", order.id);
+          },
+          onError: () => {
+            toast({ title: "Pembayaran gagal", variant: "destructive" });
+          },
+          onClose: () => {
+            toast({ title: "Pembayaran dibatalkan" });
+          },
+        });
+      } else if (result.redirectUrl) {
+        window.location.href = result.redirectUrl;
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Gagal memproses pembayaran';
+      toast({ title: message, variant: "destructive" });
+    }
   };
 
   if (!order) {

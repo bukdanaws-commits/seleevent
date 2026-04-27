@@ -41,16 +41,20 @@ import {
   BAND_MEMBERS,
   SPECIAL_GUEST,
   HIGHLIGHTS,
-  formatRupiah,
   getAvailableQuota,
   getQuotaPercentage,
 } from '@/lib/mock-data'
+import { useEvent, useTicketTypes } from '@/hooks/use-api'
+import { formatRupiah as formatRupiahUtil } from '@/lib/utils'
 import { SeatSelectionModal } from '@/components/seat/SeatSelectionModal'
 import { AutoAssignModal } from '@/components/seat/AutoAssignModal'
 import { defaultSeatConfigs, getSelectionModeLabel } from '@/lib/seat-data'
 import { GoogleLoginModal } from '@/components/GoogleLoginModal'
 import { useAuthStore } from '@/lib/auth-store'
 import { usePageStore } from '@/lib/page-store'
+
+// Use formatRupiah from utils (API-aware)
+const formatRupiah = formatRupiahUtil
 
 // Lazy imports for page views
 import dynamic from 'next/dynamic'
@@ -929,6 +933,14 @@ function TrustCTASection() {
 export default function Page() {
   const { isAuthenticated, isLoading, login } = useAuthStore()
   const { currentPage, navigateTo } = usePageStore()
+
+  // Fetch event and ticket types from API
+  const { data: eventData } = useEvent('sheila-on-7-melompat-lebih-tinggi')
+  const eventDetail = eventData as { event: Record<string, unknown> } | undefined
+  const eventObj = eventDetail?.event as Record<string, unknown> | undefined
+  const eventId = String(eventObj?.id ?? '')
+
+  const { data: ticketTypesData } = useTicketTypes(eventId)
 
   const [seatModal, setSeatModal] = useState({
     open: false,

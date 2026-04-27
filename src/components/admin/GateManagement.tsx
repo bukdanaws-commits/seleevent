@@ -1,16 +1,43 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { cn } from '@/lib/utils';
-import {
-  mockGates,
-  mockStaffUsers,
-  getGateTypeBadge,
-  getStatusBadgeColor,
-  formatTime,
-  type Gate,
-} from '@/lib/operational-mock-data';
+import React, { useState, useMemo, useEffect } from 'react';
+import { cn, formatTime } from '@/lib/utils';
+import { useAdminGates, useAdminStaff } from '@/hooks/use-api';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+
+// ─── LOCAL TYPES & HELPERS ──────────────────────────────────────────────────
+
+type Gate = {
+  id: string;
+  name: string;
+  type: 'entry' | 'exit' | 'both';
+  location: string;
+  minAccessLevel: string;
+  capacityPerMin: number;
+  status: 'active' | 'inactive' | 'closed';
+  staffCount: number;
+  totalIn: number;
+  totalOut: number;
+  currentInside: number;
+  lastScan: string | null;
+};
+
+function getGateTypeBadge(type: Gate['type']) {
+  switch (type) {
+    case 'entry': return { label: 'Masuk', color: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30' };
+    case 'exit': return { label: 'Keluar', color: 'text-red-400 bg-red-500/15 border-red-500/30' };
+    case 'both': return { label: 'Masuk/Keluar', color: 'text-amber-400 bg-amber-500/15 border-amber-500/30' };
+  }
+}
+
+function getStatusBadgeColor(status: Gate['status']) {
+  switch (status) {
+    case 'active': return 'text-emerald-400 border-emerald-500/30';
+    case 'inactive': return 'text-gray-400 border-gray-500/30';
+    case 'closed': return 'text-red-400 border-red-500/30';
+  }
+}
 
 import {
   Card,
@@ -57,7 +84,11 @@ import {
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 
 export function GateManagement() {
-  const [gates, setGates] = useState<Gate[]>([...mockGates]);
+  const { data: apiGates, isLoading, error } = useAdminGates();
+  const { data: apiStaff } = useAdminStaff();
+  const gates: Gate[] = (apiGates as any)?.data ?? apiGates as any ?? [];
+
+  const staffUsers: any[] = (apiStaff as any)?.data ?? apiStaff as any ?? [];
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -110,9 +141,7 @@ export function GateManagement() {
 
   // ── Helpers ──
   const getGateStaff = (gateName: string) =>
-    mockStaffUsers.filter(
-      (s) => s.role === 'GATE_STAFF' && s.assignedLocation === gateName
-    );
+    staffUsers.filter((s: any) => s.role === 'GATE_STAFF' && s.assignedLocation === gateName);
 
   const handleAddGate = () => {
     if (!addForm.name.trim() || !addForm.location.trim()) {
@@ -157,6 +186,9 @@ export function GateManagement() {
     setEditDialogOpen(false);
     toast.success(`Gate "${selectedGate.name}" berhasil diperbarui`);
   };
+
+  if (isLoading) return <div className="p-6 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-40 w-full" /></div>;
+  if (error) return <div className="p-6 text-red-500">Failed to load data: {error.message}</div>;
 
   return (
     <div className="space-y-6">
@@ -521,8 +553,8 @@ export function GateManagement() {
             <div className="space-y-3">
               {(() => {
                 const staff = getGateStaff(selectedGate.name);
-                const available = mockStaffUsers.filter(
-                  (s) =>
+                const available = staffUsers.filter(
+                  (s: any) =>
                     s.role === 'GATE_STAFF' &&
                     s.status === 'active' &&
                     s.assignedLocation !== selectedGate.name

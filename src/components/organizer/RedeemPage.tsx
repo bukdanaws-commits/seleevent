@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   QrCode,
   Search,
@@ -19,15 +20,10 @@ import {
   CircleDot,
   ArrowRight,
 } from 'lucide-react'
-import { mockTickets, wristbandStats } from '@/lib/admin-mock-data'
-import type { TicketRecord } from '@/lib/admin-mock-data'
-import { wristbandConfigs } from '@/lib/operational-mock-data'
+import { useOrganizerTickets, useOrganizerWristbandInventory, useCounterScan } from '@/hooks/use-api'
+import { formatRupiah } from '@/lib/utils'
 
-function generateWristbandCode(): string {
-  return `WB-${String(Math.floor(10000 + Math.random() * 90000)).padStart(5, '0')}`
-}
-
-function getStatusBadge(status: TicketRecord['status']) {
+function getStatusBadge(status: string) {
   switch (status) {
     case 'active':
       return <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20">Aktif</Badge>
@@ -44,67 +40,101 @@ function getStatusBadge(status: TicketRecord['status']) {
 
 export function RedeemPage() {
   const [searchQuery, setSearchQuery] = useState('')
-  const [foundTicket, setFoundTicket] = useState<TicketRecord | null>(null)
+  const [foundTicket, setFoundTicket] = useState<Record<string, unknown> | null>(null)
   const [wristbandInput, setWristbandInput] = useState('')
-  const [redeemedTickets, setRedeemedTickets] = useState<Set<string>>(new Set())
 
-  const todayStats = useMemo(() => {
-    const redeemed = mockTickets.filter(
-      (t) => t.status === 'redeemed' || t.status === 'inside'
-    )
+  const { data: ticketsData, isLoading: ticketsLoading } = useOrganizerTickets('sheila-on-7-melompat-lebih-tinggi')
+  const { data: wristbandData, isLoading: wristbandLoading } = useOrganizerWristbandInventory('sheila-on-7-melompat-lebih-tinggi')
+  const scanMutation = useCounterScan()
+
+  const tickets = ((ticketsData as { data: unknown[] } | undefined)?.data ?? []) as Record<string, unknown>[]
+  const wristbandInventory = ((wristbandData as { inventory: unknown[] } | undefined)?.inventory ?? []) as Record<string, unknown>[]
+
+  const todayStats = (() => {
+    const redeemed = tickets.filter((t) => String(t.status) === 'redeemed' || String(t.status) === 'inside')
+    const unused = wristbandInventory.reduce((sum, w) => sum + ((w.remainingStock as number) ?? 0), 0)
     return {
       totalRedeemed: redeemed.length,
-      wristbandsRemaining: wristbandStats.unused,
-      floorRedeemed: redeemed.filter((t) => t.tier === 'floor').length,
-      tribunRedeemed: redeemed.filter((t) => t.tier === 'tribun').length,
+      wristbandsRemaining: unused,
+      floorRedeemed: redeemed.filter((t) => String(t.tier) === 'floor').length,
+      tribunRedeemed: redeemed.filter((t) => String(t.tier) === 'tribun').length,
     }
-  }, [])
+  })()
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     const trimmed = searchQuery.trim()
     if (!trimmed) {
       toast.error('Masukkan kode tiket terlebih dahulu')
       return
     }
-    const ticket = mockTickets.find(
-      (t) => t.ticketCode.toLowerCase() === trimmed.toLowerCase()
-    )
-    if (!ticket) {
+
+    try {
+      const { publicApi } = await import('@/lib/api')
+      const checkResult = await publicApi.checkTicket(trimmed)
+
+      if (checkResult.found && checkResult.ticket) {
+        setFoundTicket(checkResult.ticket as unknown as Record<string, unknown>)
+        const wb = `WB-${String(Math.floor(10000 + Math.random() * 90000)).padStart(5, '0')}`
+        setWristbandInput(wb)
+      } else {
+        setFoundTicket(null)
+        toast.error('Tiket tidak ditemukan')
+      }
+    } catch {
       setFoundTicket(null)
       toast.error('Tiket tidak ditemukan')
-      return
     }
-    setFoundTicket(ticket)
-    const wb = generateWristbandCode()
-    setWristbandInput(wb)
   }
 
-  const handleRedeem = () => {
+  const handleRedeem = async () => {
     if (!foundTicket) return
-    if (foundTicket.status === 'redeemed' || foundTicket.status === 'inside') {
+    const status = String(foundTicket.status)
+    if (status === 'redeemed' || status === 'inside') {
       toast.error('Tiket ini sudah diredeem sebelumnya')
       return
     }
-    if (foundTicket.status === 'cancelled') {
+    if (status === 'cancelled') {
       toast.error('Tiket ini sudah dibatalkan')
       return
     }
-    setRedeemedTickets((prev) => new Set(prev).add(foundTicket.ticketCode))
-    toast.success('Gelang berhasil ditukarkan!', {
-      description: `${foundTicket.ticketCode} → ${wristbandInput}`,
-    })
-    setFoundTicket({
-      ...foundTicket,
-      status: 'redeemed',
-      wristbandCode: wristbandInput,
-      wristbandLinked: true,
-      redeemedBy: 'andi.redeem@event.id',
-      redeemedAt: new Date().toISOString(),
-    })
+
+    try {
+      await scanMutation.mutateAsync({
+        ticketCode: String(foundTicket.ticketCode),
+        counterId: '',
+        wristbandCode: wristbandInput,
+      })
+      toast.success('Gelang berhasil ditukarkan!', {
+        description: `${String(foundTicket.ticketCode)} → ${wristbandInput}`,
+      })
+      setFoundTicket(null)
+      setSearchQuery('')
+      setWristbandInput('')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Gagal menukar gelang'
+      toast.error('Gagal menukar gelang', { description: message })
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') handleSearch()
+  }
+
+  if (ticketsLoading || wristbandLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-60" />
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2 space-y-4">
+            <Skeleton className="h-64 w-full" />
+          </div>
+          <div className="space-y-4">
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -171,7 +201,7 @@ export function RedeemPage() {
               <CardContent className="p-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold text-lg text-white">Detail Tiket</h3>
-                  {getStatusBadge(foundTicket.status)}
+                  {getStatusBadge(String(foundTicket.status))}
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -179,28 +209,28 @@ export function RedeemPage() {
                     <Ticket className="h-5 w-5 text-[#00A39D] shrink-0" />
                     <div>
                       <p className="text-xs text-[#7FB3AE]">Kode Tiket</p>
-                      <p className="font-mono font-semibold text-sm text-white">{foundTicket.ticketCode}</p>
+                      <p className="font-mono font-semibold text-sm text-white">{String(foundTicket.ticketCode)}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 p-3 rounded-lg bg-[#0A0F0E]">
                     <User className="h-5 w-5 text-[#00A39D] shrink-0" />
                     <div>
                       <p className="text-xs text-[#7FB3AE]">Nama Peserta</p>
-                      <p className="font-semibold text-sm text-white">{foundTicket.userName}</p>
+                      <p className="font-semibold text-sm text-white">{String(foundTicket.attendeeName)}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 p-3 rounded-lg bg-[#0A0F0E]">
                     <Tag className="h-5 w-5 text-[#00A39D] shrink-0" />
                     <div>
                       <p className="text-xs text-[#7FB3AE]">Tipe Tiket</p>
-                      <p className="font-semibold text-sm text-white">{foundTicket.ticketType}</p>
+                      <p className="font-semibold text-sm text-white">{String(foundTicket.ticketTypeName ?? foundTicket.ticketType)}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 p-3 rounded-lg bg-[#0A0F0E]">
                     <MapPin className="h-5 w-5 text-[#00A39D] shrink-0" />
                     <div>
                       <p className="text-xs text-[#7FB3AE]">Zona</p>
-                      <p className="font-semibold text-sm text-white capitalize">{foundTicket.tier}</p>
+                      <p className="font-semibold text-sm text-white capitalize">{String(foundTicket.tier ?? '-')}</p>
                     </div>
                   </div>
                 </div>
@@ -208,18 +238,18 @@ export function RedeemPage() {
                 <Separator className="bg-white/5" />
 
                 {/* Already redeemed warning */}
-                {(foundTicket.status === 'redeemed' || foundTicket.status === 'inside') && (
+                {(String(foundTicket.status) === 'redeemed' || String(foundTicket.status) === 'inside') && (
                   <div className="flex items-center gap-3 p-4 rounded-lg bg-red-500/10 border border-red-500/20">
                     <AlertTriangle className="h-6 w-6 text-red-400 shrink-0" />
                     <div>
                       <p className="font-semibold text-red-400">Sudah Diredeem</p>
                       <p className="text-sm text-red-300/80">
                         Tiket ini sudah ditukarkan dengan gelang{' '}
-                        <span className="font-mono font-semibold">{foundTicket.wristbandCode}</span>
+                        <span className="font-mono font-semibold">{String(foundTicket.wristbandCode ?? '-')}</span>
                         {foundTicket.redeemedAt && (
                           <span>
                             {' '}pada{' '}
-                            {new Date(foundTicket.redeemedAt).toLocaleTimeString('id-ID')}
+                            {new Date(String(foundTicket.redeemedAt)).toLocaleTimeString('id-ID')}
                           </span>
                         )}
                       </p>
@@ -228,7 +258,7 @@ export function RedeemPage() {
                 )}
 
                 {/* Active ticket: wristband pairing */}
-                {foundTicket.status === 'active' && (
+                {String(foundTicket.status) === 'active' && (
                   <div className="space-y-3">
                     <h4 className="font-medium text-sm flex items-center gap-2 text-white">
                       <CircleDot className="h-4 w-4 text-[#00A39D]" />
@@ -241,9 +271,17 @@ export function RedeemPage() {
                         placeholder="Scan kode gelang..."
                         className="font-mono bg-[#0A0F0E] border-white/10 text-white placeholder:text-[#7FB3AE]/50"
                       />
-                      <Button onClick={handleRedeem} className="gap-2 bg-[#00A39D] hover:bg-[#00A39D]/90 text-white min-w-[140px]">
-                        <CheckCircle2 className="h-4 w-4" />
-                        Tukar Gelang
+                      <Button
+                        onClick={handleRedeem}
+                        disabled={scanMutation.isPending}
+                        className="gap-2 bg-[#00A39D] hover:bg-[#00A39D]/90 text-white min-w-[140px]"
+                      >
+                        {scanMutation.isPending ? 'Memproses...' : (
+                          <>
+                            <CheckCircle2 className="h-4 w-4" />
+                            Tukar Gelang
+                          </>
+                        )}
                       </Button>
                     </div>
                     <p className="text-xs text-[#7FB3AE]">
@@ -253,7 +291,7 @@ export function RedeemPage() {
                 )}
 
                 {/* Cancelled */}
-                {foundTicket.status === 'cancelled' && (
+                {String(foundTicket.status) === 'cancelled' && (
                   <div className="flex items-center gap-3 p-4 rounded-lg bg-red-500/10 border border-red-500/20">
                     <AlertTriangle className="h-6 w-6 text-red-400 shrink-0" />
                     <div>

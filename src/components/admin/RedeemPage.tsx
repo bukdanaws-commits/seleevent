@@ -2,6 +2,8 @@
 
 import { useState, useMemo } from 'react'
 import { toast } from 'sonner'
+import { useOrganizerTickets, useOrganizerWristbandInventory } from '@/hooks/use-api'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,8 +21,20 @@ import {
   CircleDot,
   ArrowRight,
 } from 'lucide-react'
-import { mockTickets, wristbandStats } from '@/lib/admin-mock-data'
-import type { TicketRecord } from '@/lib/admin-mock-data'
+
+// ─── LOCAL TYPES ──────────────────────────────────────────────────────────────
+
+type TicketRecord = {
+  id: string
+  ticketCode: string
+  attendeeName: string
+  ticketTypeName: string
+  zone: string
+  status: 'active' | 'redeemed' | 'inside_venue' | 'cancelled'
+  wristbandCode: string | null
+  redeemedBy: string | null
+  redeemedAt: string | null
+}
 
 function generateWristbandCode(): string {
   return `WB-${String(Math.floor(10000 + Math.random() * 90000)).padStart(5, '0')}`
@@ -40,6 +54,11 @@ function getStatusBadge(status: TicketRecord['status']) {
 }
 
 export function RedeemPage() {
+  const { data: ticketsData, isLoading, error } = useOrganizerTickets('')
+  const { data: inventoryData } = useOrganizerWristbandInventory('')
+  const mockTickets: TicketRecord[] = (ticketsData as any)?.data ?? (ticketsData as any) ?? []
+  const wristbandStats: any = inventoryData ?? { unused: 0, used: 0, total: 0 }
+
   const [searchQuery, setSearchQuery] = useState('')
   const [foundTicket, setFoundTicket] = useState<TicketRecord | null>(null)
   const [wristbandInput, setWristbandInput] = useState('')
@@ -55,7 +74,7 @@ export function RedeemPage() {
       floorRedeemed: redeemed.filter((t) => t.zone === 'floor').length,
       tribunRedeemed: redeemed.filter((t) => t.zone === 'tribun').length,
     }
-  }, [])
+  }, [mockTickets, wristbandStats.unused])
 
   const handleSearch = () => {
     const trimmed = searchQuery.trim()
@@ -102,6 +121,9 @@ export function RedeemPage() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') handleSearch()
   }
+
+  if (isLoading) return <div className="p-6 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-40 w-full" /></div>
+  if (error) return <div className="p-6 text-red-500">Failed to load data: {error.message}</div>
 
   return (
     <div className="space-y-6">

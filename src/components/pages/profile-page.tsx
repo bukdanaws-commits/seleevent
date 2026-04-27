@@ -25,7 +25,8 @@ import {
   Mail,
   Phone,
 } from "lucide-react";
-import { formatRupiah } from "@/lib/mock-data";
+import { formatRupiah } from "@/lib/utils";
+import { useAuth } from "@/hooks/use-api";
 import { useAuthStore } from "@/lib/auth-store";
 import { usePageStore } from "@/lib/page-store";
 import { useToast } from "@/hooks/use-toast";
@@ -34,6 +35,10 @@ export default function ProfilePage() {
   const { user, orders, logout } = useAuthStore();
   const { navigateTo } = usePageStore();
   const { toast } = useToast();
+  const { data: authData } = useAuth();
+
+  // Prefer API user data over store
+  const currentUser = (authData?.user as Record<string, unknown> | undefined) ?? user;
 
   // Stats
   const totalOrders = orders.length;
@@ -78,9 +83,9 @@ export default function ProfilePage() {
           <CardContent className="relative px-6 pb-6 -mt-10">
             <div className="flex items-end gap-4">
               <Avatar className="w-20 h-20 border-4 border-[#16161D] shadow-lg">
-                <AvatarImage src={user?.avatar} alt={user?.name} />
+                <AvatarImage src={currentUser?.avatar as string} alt={currentUser?.name as string} />
                 <AvatarFallback className="bg-green-500/20 text-green-400 text-xl">
-                  {user?.name
+                  {(currentUser?.name as string)
                     ?.split(" ")
                     .map((n) => n[0])
                     .join("")
@@ -88,7 +93,7 @@ export default function ProfilePage() {
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 pb-1">
-                <h2 className="text-white text-xl font-bold">{user?.name}</h2>
+                <h2 className="text-white text-xl font-bold">{currentUser?.name as string}</h2>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -106,11 +111,11 @@ export default function ProfilePage() {
             <div className="mt-4 space-y-2">
               <div className="flex items-center gap-2 text-sm text-gray-400">
                 <Mail className="w-4 h-4 text-gray-600" />
-                {user?.email}
+                {currentUser?.email as string}
               </div>
               <div className="flex items-center gap-2 text-sm text-gray-400">
                 <Phone className="w-4 h-4 text-gray-600" />
-                {user?.phone}
+                {currentUser?.phone as string}
               </div>
             </div>
           </CardContent>

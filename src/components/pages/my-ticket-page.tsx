@@ -3,13 +3,10 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 import { QRCodeSVG } from 'qrcode.react';
-import { formatRupiah } from '@/lib/mock-data';
+import { formatRupiah } from '@/lib/utils';
 import {
-  mockAttendeeStatuses,
-  wristbandConfigs,
-  liveStats,
-  type AttendeeStatus,
-} from '@/lib/operational-mock-data';
+  useOrganizerWristbandGuide,
+} from '@/hooks/use-api';
 
 import {
   Card,
@@ -165,6 +162,12 @@ function formatTime(dateStr: string): string {
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 
 export default function MyTicketPage() {
+  const { data: guideData } = useOrganizerWristbandGuide()
+  const wristbandConfigs = (() => {
+    const guide = guideData as { guide: unknown[] } | undefined
+    return (guide?.guide ?? []) as Record<string, unknown>[]
+  })()
+
   const totalTickets = myTickets.length;
   const redeemed = myTickets.filter((t) => t.status !== 'not_redeemed').length;
   const inside = myTickets.filter((t) => t.status === 'inside').length;
@@ -456,18 +459,18 @@ export default function MyTicketPage() {
               Panduan Warna Gelang
             </h3>
             <div className="grid grid-cols-2 gap-2">
-              {wristbandConfigs.map((wb) => (
+              {wristbandConfigs.map((wb, idx) => (
                 <div
-                  key={wb.ticketTypeId}
+                  key={String(wb.ticketTypeId ?? idx)}
                   className="flex items-center gap-2 p-2 rounded-lg bg-[#0A0F0E]/60 border border-[rgba(0,163,157,0.06)]"
                 >
                   <div
                     className="w-4 h-4 rounded-full shrink-0 border border-white/10"
-                    style={{ backgroundColor: wb.wristbandColorHex }}
+                    style={{ backgroundColor: String(wb.wristbandColorHex ?? '#E5E7EB') }}
                   />
                   <div>
-                    <p className="text-[11px] text-white font-medium">{wb.emoji} {wb.ticketTypeName}</p>
-                    <p className="text-[9px] text-[#7FB3AE]">{wb.wristbandColor}</p>
+                    <p className="text-[11px] text-white font-medium">{String(wb.emoji ?? '')} {String(wb.ticketTypeName ?? '-')}</p>
+                    <p className="text-[9px] text-[#7FB3AE]">{String(wb.wristbandColor ?? '-')}</p>
                   </div>
                 </div>
               ))}

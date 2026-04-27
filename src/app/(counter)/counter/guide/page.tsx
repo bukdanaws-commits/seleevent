@@ -3,9 +3,30 @@
 import { Watch, Hash } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { wristbandConfigs } from '@/lib/operational-mock-data'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useCounterGuide } from '@/hooks/use-api'
 
 export default function GuidePage() {
+  const { data: guideData, isLoading } = useCounterGuide()
+
+  // Extract wristband configs from API response
+  const wristbandConfigs = (() => {
+    const guide = guideData as { guide: unknown[] } | undefined
+    return (guide?.guide ?? []) as Record<string, unknown>[]
+  })()
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-4 p-4 max-w-lg mx-auto w-full">
+        <Skeleton className="h-16 w-48" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-36" />)}
+        </div>
+        <Skeleton className="h-48 w-full" />
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-5 p-4 max-w-lg mx-auto w-full">
       {/* ── Header ── */}
@@ -25,37 +46,30 @@ export default function GuidePage() {
 
       {/* ── Wristband Cards Grid ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {wristbandConfigs.map((wb) => (
+        {wristbandConfigs.map((wb, idx) => (
           <Card
-            key={wb.ticketTypeId}
+            key={String(wb.ticketTypeId ?? idx)}
             className="bg-[#111918] border-border/30 hover:border-primary/30 transition-colors"
           >
             <CardContent className="p-4 flex flex-col items-center gap-3 text-center">
               {/* Color Swatch */}
               <div
                 className="h-12 w-12 rounded-full border-2 border-white/10 shadow-lg"
-                style={{ backgroundColor: wb.wristbandColorHex }}
+                style={{ backgroundColor: String(wb.wristbandColorHex ?? '#E5E7EB') }}
               />
               {/* Tier Name */}
               <div>
                 <p className="text-sm font-semibold text-foreground leading-tight">
-                  {wb.ticketTypeName}
+                  {String(wb.ticketTypeName ?? '-')}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {wb.wristbandColor}
+                  {String(wb.wristbandColor ?? '-')}
                 </p>
               </div>
               {/* Wristband Type */}
               <Badge className="text-[10px] bg-primary/10 text-primary border-primary/20 hover:bg-primary/15">
-                {wb.wristbandType}
+                {String(wb.wristbandType ?? '-')}
               </Badge>
-              {/* Hex Code */}
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <Hash className="h-3 w-3" />
-                <span className="text-[10px] font-mono">
-                  {wb.wristbandColorHex}
-                </span>
-              </div>
             </CardContent>
           </Card>
         ))}
@@ -70,7 +84,7 @@ export default function GuidePage() {
           <div className="space-y-1">
             {wristbandConfigs.map((wb, idx) => (
               <div
-                key={wb.ticketTypeId}
+                key={String(wb.ticketTypeId ?? idx)}
                 className={`flex items-center justify-between py-2 px-3 rounded-lg ${
                   idx % 2 === 0 ? 'bg-[#0A0F0E]/60' : ''
                 }`}
@@ -78,14 +92,14 @@ export default function GuidePage() {
                 <div className="flex items-center gap-2.5">
                   <div
                     className="h-4 w-4 rounded-full border border-white/10 shrink-0"
-                    style={{ backgroundColor: wb.wristbandColorHex }}
+                    style={{ backgroundColor: String(wb.wristbandColorHex ?? '#E5E7EB') }}
                   />
                   <span className="text-xs font-medium text-foreground">
-                    {wb.ticketTypeName}
+                    {String(wb.ticketTypeName ?? '-')}
                   </span>
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  {wb.wristbandColor}
+                  {String(wb.wristbandColor ?? '-')}
                 </span>
               </div>
             ))}

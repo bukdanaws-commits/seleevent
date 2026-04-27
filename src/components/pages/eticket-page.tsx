@@ -25,8 +25,7 @@ import {
   CheckCircle2,
   Copy,
 } from "lucide-react";
-import { formatRupiah, formatDate } from "@/lib/mock-data";
-import type { Ticket } from "@/lib/mock-data";
+import { formatRupiah, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/lib/auth-store";
 import { usePageStore } from "@/lib/page-store";
 import { useToast } from "@/hooks/use-toast";

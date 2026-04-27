@@ -23,102 +23,94 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import {
-  mockGates,
-  mockStaffUsers,
-  mockAttendeeStatuses,
-  mockGateLogs,
-  wristbandConfigs,
-  getAttendeeStatusBadge,
-  formatTime,
-} from '@/lib/operational-mock-data'
-import type { AttendeeStatus } from '@/lib/operational-mock-data'
+import { Skeleton } from '@/components/ui/skeleton'
+import { toast } from 'sonner'
+import { useGateScan, useGateProfile } from '@/hooks/use-api'
+import type { IGateScanResponse } from '@/lib/types'
 
-// ── CONTEXT ──────────────────────────────────────────────────────────────
-const currentStaff = mockStaffUsers.find(s => s.id === 'gs-001')!
-const currentGate = mockGates.find(g => g.id === 'gate-a')!
-
-// ── SCAN RESULT TYPES ────────────────────────────────────────────────────
 type ScanResultType = 'success_in' | 'success_out' | 'error_not_found' | 'error_already_inside' | 'error_not_entered' | 'error_not_redeemed' | 'idle'
 
 interface ScanResult {
   type: ScanResultType
-  attendee: AttendeeStatus | null
+  attendee: Record<string, unknown> | null
   message: string
 }
 
-// ── MOCK SIMULATION CODES ────────────────────────────────────────────────
-const demoCodeMap: Record<string, AttendeeStatus> = {}
-mockAttendeeStatuses.forEach(a => {
-  demoCodeMap[a.ticketCode] = a
-  if (a.wristbandCode) {
-    demoCodeMap[a.wristbandCode] = a
-  }
-})
-
 export function GateScanner() {
   const [searchValue, setSearchValue] = useState('')
-  const [isScanning, setIsScanning] = useState(false)
   const [result, setResult] = useState<ScanResult | null>(null)
   const [showSuccessOverlay, setShowSuccessOverlay] = useState(false)
   const [successAction, setSuccessAction] = useState<'IN' | 'OUT'>('IN')
 
-  const handleScan = useCallback((code: string) => {
+  const scanMutation = useGateScan()
+  const { data: profileData, isLoading: profileLoading } = useGateProfile()
+
+  // Get gate info from profile
+  const profile = profileData as Record<string, unknown> | undefined
+  const gateInfo = profile?.gate as Record<string, unknown> | undefined
+  const gateName = (gateInfo?.name as string) ?? 'Gate'
+  const gateType = (gateInfo?.type as string) ?? 'both'
+  const gateLocation = (gateInfo?.location as string) ?? ''
+  const gateStatus = (gateInfo?.status as string) ?? 'active'
+  const gateId = (gateInfo?.id as string) ?? ''
+
+  const staffInfo = profile?.staff as Record<string, unknown> | undefined
+  const staffName = (staffInfo?.name as string) ?? 'Gate Staff'
+
+  const handleScan = useCallback(async (code: string) => {
     const trimmed = code.trim()
     if (!trimmed) return
 
-    setIsScanning(false)
+    try {
+      // Determine action based on gate type
+      const action: 'IN' | 'OUT' = gateType === 'exit' ? 'OUT' : 'IN'
 
-    const attendee = Object.values(demoCodeMap).find(
-      a => a.ticketCode.toLowerCase() === trimmed.toLowerCase() || a.wristbandCode?.toLowerCase() === trimmed.toLowerCase()
-    )
+      const scanResult = await scanMutation.mutateAsync({
+        ticketCode: trimmed,
+        gateId,
+        action,
+      })
 
-    // Determine action based on gate type
-    const gateType = currentGate.type
+      const resp = scanResult as IGateScanResponse
 
-    if (!attendee) {
-      setResult({ type: 'error_not_found', attendee: null, message: 'Tiket tidak ditemukan' })
-      return
-    }
-
-    if (attendee.currentStatus === 'not_redeemed') {
-      setResult({ type: 'error_not_redeemed', attendee, message: 'Tiket belum ditukar gelang!' })
-      return
-    }
-
-    if (gateType === 'entry') {
-      if (attendee.currentStatus === 'inside') {
-        setResult({ type: 'error_already_inside', attendee, message: 'Sudah di dalam venue' })
-        return
-      }
-      setResult({ type: 'success_in', attendee, message: 'Izinkan masuk' })
-    } else if (gateType === 'exit') {
-      if (attendee.currentStatus !== 'inside') {
-        setResult({ type: 'error_not_entered', attendee, message: 'Penonton belum masuk' })
-        return
-      }
-      setResult({ type: 'success_out', attendee, message: 'Izinkan keluar' })
-    } else {
-      // Both — let user choose
-      if (attendee.currentStatus === 'inside') {
-        setResult({ type: 'success_out', attendee, message: 'Pilih aksi' })
+      if (resp.success) {
+        if (action === 'IN') {
+          setResult({ type: 'success_in', attendee: { ...resp }, message: 'Izinkan masuk' })
+        } else {
+          setResult({ type: 'success_out', attendee: { ...resp }, message: 'Izinkan keluar' })
+        }
       } else {
-        setResult({ type: 'success_in', attendee, message: 'Pilih aksi' })
+        // Handle error cases from response
+        const errorMsg = resp.error ?? 'Unknown error'
+        if (errorMsg.toLowerCase().includes('not found') || errorMsg.toLowerCase().includes('invalid')) {
+          setResult({ type: 'error_not_found', attendee: null, message: 'Tiket tidak ditemukan' })
+        } else if (errorMsg.toLowerCase().includes('already inside') || errorMsg.toLowerCase().includes('sudah masuk')) {
+          setResult({ type: 'error_already_inside', attendee: { ...resp }, message: 'Sudah di dalam venue' })
+        } else if (errorMsg.toLowerCase().includes('not redeemed') || errorMsg.toLowerCase().includes('belum ditukar')) {
+          setResult({ type: 'error_not_redeemed', attendee: { ...resp }, message: 'Tiket belum ditukar gelang!' })
+        } else if (errorMsg.toLowerCase().includes('not entered') || errorMsg.toLowerCase().includes('belum masuk')) {
+          setResult({ type: 'error_not_entered', attendee: { ...resp }, message: 'Penonton belum masuk' })
+        } else {
+          setResult({ type: 'error_not_found', attendee: null, message: errorMsg })
+        }
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Scan gagal'
+      if (message.toLowerCase().includes('not found') || message.toLowerCase().includes('invalid')) {
+        setResult({ type: 'error_not_found', attendee: null, message: 'Tiket tidak ditemukan' })
+      } else if (message.toLowerCase().includes('already inside')) {
+        setResult({ type: 'error_already_inside', attendee: null, message: 'Sudah di dalam venue' })
+      } else if (message.toLowerCase().includes('not redeemed')) {
+        setResult({ type: 'error_not_redeemed', attendee: null, message: 'Tiket belum ditukar gelang!' })
+      } else {
+        setResult({ type: 'error_not_found', attendee: null, message })
       }
     }
-  }, [])
+  }, [gateId, gateType, scanMutation])
 
   const handleSimulateScan = useCallback(() => {
-    setIsScanning(true)
-    setResult(null)
-    // Simulate scanning delay then show a random attendee
-    setTimeout(() => {
-      const inside = mockAttendeeStatuses.filter(a => a.currentStatus !== 'not_redeemed')
-      const randomAttendee = inside[Math.floor(Math.random() * inside.length)]
-      const code = randomAttendee.wristbandCode || randomAttendee.ticketCode
-      handleScan(code)
-    }, 1200)
-  }, [handleScan])
+    toast.info('Fitur simulasi scan tidak tersedia dengan backend API')
+  }, [])
 
   const handleManualSearch = useCallback(() => {
     if (!searchValue.trim()) return
@@ -141,7 +133,17 @@ export function GateScanner() {
   }, [])
 
   const getWristbandConfig = (ticketType: string) => {
-    return wristbandConfigs.find(w => w.ticketTypeName === ticketType)
+    // Could fetch from API, for now return basic info from scan result
+    return null
+  }
+
+  if (profileLoading) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center px-4 gap-4">
+        <Skeleton className="h-64 w-64 rounded-2xl" />
+        <Skeleton className="h-10 w-full max-w-sm" />
+      </div>
+    )
   }
 
   return (
@@ -174,7 +176,7 @@ export function GateScanner() {
                   <div className="absolute left-1/2 top-4 bottom-4 w-px bg-[#00A39D]/20" />
                 </div>
 
-                {isScanning ? (
+                {scanMutation.isPending ? (
                   <motion.div
                     initial={{ y: -100 }}
                     animate={{ y: [-100, 100, -100] }}
@@ -191,19 +193,19 @@ export function GateScanner() {
 
               {/* Gate action context */}
               <div className="flex items-center gap-2">
-                {currentGate.type === 'entry' && (
+                {gateType === 'entry' && (
                   <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 gap-1.5 px-3 py-1">
                     <LogIn className="h-3.5 w-3.5" />
                     MASUK
                   </Badge>
                 )}
-                {currentGate.type === 'exit' && (
+                {gateType === 'exit' && (
                   <Badge className="bg-red-500/20 text-red-400 border border-red-500/30 gap-1.5 px-3 py-1">
                     <LogOut className="h-3.5 w-3.5" />
                     KELUAR
                   </Badge>
                 )}
-                {currentGate.type === 'both' && (
+                {gateType === 'both' && (
                   <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/30 gap-1.5 px-3 py-1">
                     <ArrowRightLeft className="h-3.5 w-3.5" />
                     MASUK / KELUAR
@@ -231,6 +233,7 @@ export function GateScanner() {
                   <Button
                     size="sm"
                     onClick={handleManualSearch}
+                    disabled={scanMutation.isPending}
                     className="h-10 bg-[#00A39D] hover:bg-[#00A39D]/80 text-white shrink-0"
                   >
                     <Search className="h-4 w-4" />
@@ -293,7 +296,7 @@ export function GateScanner() {
               )}
 
               {/* Not redeemed warning */}
-              {result.type === 'error_not_redeemed' && result.attendee && (
+              {result.type === 'error_not_redeemed' && (
                 <Card className="bg-[#111918] border-amber-500/30">
                   <CardContent className="p-5 flex flex-col items-center gap-4 text-center">
                     <motion.div
@@ -310,17 +313,6 @@ export function GateScanner() {
                       <p className="text-xs text-[#7FB3AE] mt-1">
                         Penonton harus menukar tiket dengan gelang di counter redeem terlebih dahulu
                       </p>
-                    </div>
-                    {/* Show partial info */}
-                    <div className="w-full bg-[#0A0F0E] rounded-xl p-3 text-left space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <User className="h-3.5 w-3.5 text-[#7FB3AE]" />
-                        <span className="text-white font-medium">{result.attendee.userName}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-[#7FB3AE]">
-                        <Ticket className="h-3 w-3" />
-                        <span>{result.attendee.ticketType}</span>
-                      </div>
                     </div>
                     <Button
                       variant="outline"
@@ -346,16 +338,15 @@ export function GateScanner() {
                         </div>
                         <div>
                           <h3 className="text-sm font-bold text-white leading-tight">
-                            {result.attendee.userName}
+                            {String(result.attendee.attendeeName ?? '-')}
                           </h3>
                           <p className="text-[11px] text-[#7FB3AE] mt-0.5">
-                            {result.attendee.ticketType}
-                          {result.attendee.seatLabel ? ` · Seat ${result.attendee.seatLabel}` : ''}
+                            {String(result.attendee.ticketTypeName ?? '-')}
                           </p>
                         </div>
                       </div>
-                      <Badge className={cn('text-[10px] border', getAttendeeStatusBadge(result.attendee.currentStatus).color)}>
-                        {getAttendeeStatusBadge(result.attendee.currentStatus).label}
+                      <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px]">
+                        {result.type === 'success_in' ? 'MASUK' : 'KELUAR'}
                       </Badge>
                     </div>
 
@@ -366,59 +357,29 @@ export function GateScanner() {
                           <Ticket className="h-3.5 w-3.5" />
                           <span>Tiket</span>
                         </div>
-                        <span className="text-xs font-mono text-white">{result.attendee.ticketCode}</span>
+                        <span className="text-xs font-mono text-white">{String(result.attendee.ticketCode ?? '-')}</span>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-xs text-[#7FB3AE]">
-                          <Watch className="h-3.5 w-3.5" />
-                          <span>Gelang</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {result.attendee.wristbandCode && (
-                            <>
-                              <span
-                                className="w-3 h-3 rounded-full border border-white/20"
-                                style={{ backgroundColor: getWristbandConfig(result.attendee.ticketType)?.wristbandColorHex || '#888' }}
-                              />
-                              <span className="text-xs font-mono text-white">{result.attendee.wristbandCode}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      {result.attendee.wristbandCode && (
+                      {result.attendee.wristbandColor && (
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-[#7FB3AE]">Tipe Gelang</span>
-                          <span className="text-xs text-white">
-                            {getWristbandConfig(result.attendee.ticketType)?.wristbandType || '-'}
-                          </span>
+                          <div className="flex items-center gap-2 text-xs text-[#7FB3AE]">
+                            <Watch className="h-3.5 w-3.5" />
+                            <span>Gelang</span>
+                          </div>
+                          <span className="text-xs text-white">{String(result.attendee.wristbandColor)}</span>
                         </div>
                       )}
-                      {result.attendee.reentryCount > 0 && (
+                      {(result.attendee.reentryCount as number) > 0 && (
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-[#7FB3AE]">Re-entry</span>
                           <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px]">
-                            {result.attendee.reentryCount}x
+                            {String(result.attendee.reentryCount)}x
                           </Badge>
-                        </div>
-                      )}
-                      {result.attendee.gateUsed && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-[#7FB3AE]">Gate Terakhir</span>
-                          <span className="text-xs text-white">{result.attendee.gateUsed}</span>
                         </div>
                       )}
                     </div>
 
-                    {/* Not redeemed warning line */}
-                    {result.attendee.currentStatus === 'redeemed' && (
-                      <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-                        <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
-                        <span className="text-[11px] text-amber-300">Tiket belum ditukar gelang!</span>
-                      </div>
-                    )}
-
                     {/* Action buttons */}
-                    {currentGate.type === 'both' ? (
+                    {gateType === 'both' ? (
                       <div className="grid grid-cols-2 gap-2">
                         <Button
                           onClick={() => handleConfirm('IN')}

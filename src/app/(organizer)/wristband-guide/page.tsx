@@ -3,8 +3,9 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { wristbandConfigs } from '@/lib/operational-mock-data'
+import { useOrganizerWristbandGuide } from '@/hooks/use-api'
 import {
   QrCode,
   ScanLine,
@@ -28,20 +29,22 @@ function FAQItem({ q, a }: { q: string; a: string }) {
           <HelpCircle className="w-4 h-4 text-[#00A39D] shrink-0" />
           <span className="text-sm text-white font-medium">{q}</span>
         </div>
-        {open ? (
-          <ChevronUp className="w-4 h-4 text-[#7FB3AE] shrink-0" />
-        ) : (
-          <ChevronDown className="w-4 h-4 text-[#7FB3AE] shrink-0" />
-        )}
+        {open ? <ChevronUp className="w-4 h-4 text-[#7FB3AE] shrink-0" /> : <ChevronDown className="w-4 h-4 text-[#7FB3AE] shrink-0" />}
       </div>
-      {open && (
-        <p className="text-sm text-[#7FB3AE] mt-3 ml-7">{a}</p>
-      )}
+      {open && <p className="text-sm text-[#7FB3AE] mt-3 ml-7">{a}</p>}
     </button>
   )
 }
 
 export default function WristbandGuidePage() {
+  const { data: guideData, isLoading } = useOrganizerWristbandGuide()
+
+  // Extract wristband configs from API
+  const wristbandConfigs = (() => {
+    const guide = guideData as { guide: unknown[] } | undefined
+    return (guide?.guide ?? []) as Record<string, unknown>[]
+  })()
+
   const flowSteps = [
     { step: 1, title: 'Scan E-Tiket', desc: 'Scan QR code e-tiket peserta atau masukkan kode tiket secara manual di stasiun penukaran.', icon: QrCode },
     { step: 2, title: 'Verifikasi Data', desc: 'Pastikan data tiket cocok dengan identitas peserta (nama, tipe tiket, status aktif).', icon: ScanLine },
@@ -50,31 +53,25 @@ export default function WristbandGuidePage() {
   ]
 
   const faqs = [
-    {
-      q: 'Bagaimana jika gelang rusak saat dipasang?',
-      a: 'Langsung ambil gelang pengganti dari stok darurat. Scan gelang baru dan lakukan re-pair dengan tiket yang sama. Log aktivitas akan tercatat otomatis.',
-    },
-    {
-      q: 'Peserta datang tanpa e-tiket. Apa yang harus dilakukan?',
-      a: 'Cari data peserta di halaman Cek Tiket berdasarkan nama atau email. Jika ditemukan, buatkan ulang e-tiket melalui menu admin. Jika tidak ditemukan, arahkan ke loket informasi.',
-    },
-    {
-      q: 'Apakah peserta bisa bertukar gelang?',
-      a: 'Tidak. Gelang yang sudah dipasang tidak boleh dipindah ke orang lain. Jika ditemukan indikasi pertukaran, laporkan ke koordinator untuk investigasi.',
-    },
-    {
-      q: 'Stok gelang untuk tipe tertentu habis?',
-      a: 'Hubungi koordinator logistik melalui radio/walkie-talkie. Stok darurat tersedia di gudang VIP Counter. Tidak boleh menggunakan gelang tipe lain.',
-    },
-    {
-      q: 'Bagaimana menangani peserta yang datang terlambat?',
-      a: 'Selama gate masih aktif, peserta tetap bisa melakukan penukaran gelang. Jika gate sudah ditutup, arahkan ke Exit Utama untuk koordinasi lebih lanjut.',
-    },
-    {
-      q: 'Sistem scanner tidak bisa membaca QR code?',
-      a: 'Coba bersihkan lensa scanner. Jika masih tidak bisa, masukkan kode tiket secara manual (16 karakter). Pastikan pencahayaan cukup.',
-    },
+    { q: 'Bagaimana jika gelang rusak saat dipasang?', a: 'Langsung ambil gelang pengganti dari stok darurat. Scan gelang baru dan lakukan re-pair dengan tiket yang sama. Log aktivitas akan tercatat otomatis.' },
+    { q: 'Peserta datang tanpa e-tiket. Apa yang harus dilakukan?', a: 'Cari data peserta di halaman Cek Tiket berdasarkan nama atau email. Jika ditemukan, buatkan ulang e-tiket melalui menu admin. Jika tidak ditemukan, arahkan ke loket informasi.' },
+    { q: 'Apakah peserta bisa bertukar gelang?', a: 'Tidak. Gelang yang sudah dipasang tidak boleh dipindah ke orang lain. Jika ditemukan indikasi pertukaran, laporkan ke koordinator untuk investigasi.' },
+    { q: 'Stok gelang untuk tipe tertentu habis?', a: 'Hubungi koordinator logistik melalui radio/walkie-talkie. Stok darurat tersedia di gudang VIP Counter. Tidak boleh menggunakan gelang tipe lain.' },
+    { q: 'Bagaimana menangani peserta yang datang terlambat?', a: 'Selama gate masih aktif, peserta tetap bisa melakukan penukaran gelang. Jika gate sudah ditutup, arahkan ke Exit Utama untuk koordinasi lebih lanjut.' },
+    { q: 'Sistem scanner tidak bisa membaca QR code?', a: 'Coba bersihkan lensa scanner. Jika masih tidak bisa, masukkan kode tiket secara manual (16 karakter). Pastikan pencahayaan cukup.' },
   ]
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-60" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {[1,2,3,4].map(i => <Skeleton key={i} className="h-36" />)}
+        </div>
+        <Skeleton className="h-48 w-full" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -88,37 +85,37 @@ export default function WristbandGuidePage() {
       <div>
         <h3 className="text-sm font-semibold text-[#7FB3AE] uppercase tracking-wider mb-3">Konfigurasi Gelang</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {wristbandConfigs.map((wb) => (
-            <Card key={wb.ticketTypeId} className="bg-[#111918] border-white/5 hover:border-[#00A39D]/20 transition-colors">
+          {wristbandConfigs.map((wb, idx) => (
+            <Card key={String(wb.ticketTypeId ?? idx)} className="bg-[#111918] border-white/5 hover:border-[#00A39D]/20 transition-colors">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div
                     className="w-10 h-10 rounded-full shrink-0 border-2 border-white/10 shadow-lg"
-                    style={{ backgroundColor: wb.wristbandColorHex }}
+                    style={{ backgroundColor: String(wb.wristbandColorHex ?? '#E5E7EB') }}
                   />
                   <div>
-                    <p className="text-sm text-white font-semibold">{wb.ticketTypeName}</p>
-                    <p className="text-[11px] text-[#7FB3AE]">{wb.emoji}</p>
+                    <p className="text-sm text-white font-semibold">{String(wb.ticketTypeName ?? '-')}</p>
+                    <p className="text-[11px] text-[#7FB3AE]">{String(wb.emoji ?? '')}</p>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-[#7FB3AE]">Warna</span>
                     <Badge variant="outline" className="text-[10px] text-white border-white/10">
-                      {wb.wristbandColor}
+                      {String(wb.wristbandColor ?? '-')}
                     </Badge>
                   </div>
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-[#7FB3AE]">Tipe</span>
-                    <span className="text-white font-medium">{wb.wristbandType}</span>
-                  </div>
-                  <div className="w-full h-2 rounded-full mt-2" style={{ backgroundColor: wb.wristbandColorHex + '30' }}>
-                    <div className="h-full rounded-full" style={{ backgroundColor: wb.wristbandColorHex, width: '100%' }} />
+                    <span className="text-white font-medium">{String(wb.wristbandType ?? '-')}</span>
                   </div>
                 </div>
               </CardContent>
             </Card>
           ))}
+          {wristbandConfigs.length === 0 && (
+            <p className="text-sm text-[#7FB3AE] col-span-full text-center py-8">Data konfigurasi gelang belum tersedia</p>
+          )}
         </div>
       </div>
 

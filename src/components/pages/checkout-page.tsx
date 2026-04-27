@@ -28,19 +28,20 @@ import {
   Copy,
 } from "lucide-react";
 import {
-  mockEvent,
-  mockUser,
   formatRupiah,
-  getAvailableQuota,
-  getQuotaPercentage,
   type Attendee,
   type OrderItem,
   type Order,
-  type Ticket,
+  type Ticket as TicketType,
+  mockEvent,
+  mockUser,
+  getAvailableQuota,
+  getQuotaPercentage,
 } from "@/lib/mock-data";
 import { useAuthStore } from "@/lib/auth-store";
 import { usePageStore } from "@/lib/page-store";
 import { useToast } from "@/hooks/use-toast";
+import { useCreateOrder } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
 
 const STEPS = ["Pilih Tiket", "Data Peserta", "Konfirmasi & Bayar"];

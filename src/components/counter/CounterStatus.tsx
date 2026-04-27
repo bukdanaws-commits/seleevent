@@ -18,54 +18,65 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Progress } from '@/components/ui/progress'
-import {
-  mockStaffUsers,
-  mockCounters,
-  mockRedemptions,
-  mockRedemptionConfig,
-  getCounterStatusBadge,
-  getStatusBadgeColor,
-} from '@/lib/operational-mock-data'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useCounterStatus, useCounterRedemptions } from '@/hooks/use-api'
 
 // ============================================================
 // Component
 // ============================================================
 
 export function CounterStatus() {
-  const currentStaff = mockStaffUsers.find((s) => s.id === 'cs-001')!
-  const currentCounter = mockCounters.find((c) => c.id === 'ctr-001')!
-  const config = mockRedemptionConfig
+  const { data: statusData, isLoading } = useCounterStatus()
+  const { data: redemptionsData } = useCounterRedemptions()
 
-  // Calculate stats
-  const allCounterRedemptions = mockRedemptions.filter(
-    (r) => r.counterName === currentCounter.name
-  )
-  const myRedemptions = mockRedemptions.filter(
-    (r) =>
-      r.counterName === currentCounter.name &&
-      r.staffName === currentStaff.name
-  )
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-4 p-4 max-w-lg mx-auto w-full">
+        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    )
+  }
 
-  // Staff on duty at this counter
-  const staffOnDuty = mockStaffUsers.filter(
-    (s) =>
-      s.role === 'COUNTER_STAFF' &&
-      s.status === 'active' &&
-      s.assignedLocation === currentCounter.name
-  )
+  const counterInfo = statusData?.counter as Record<string, unknown> | undefined
+  const statsInfo = statusData?.stats as Record<string, unknown> | undefined
 
-  // Average per hour (assuming ~8 hour shift, use total counter redemptions)
-  const avgPerHour = Math.round(
-    allCounterRedemptions.length /
-      Math.max(1, Math.ceil((Date.now() - new Date(currentCounter.openAt || config.startDate + 'T08:00:00').getTime()) / (1000 * 60 * 60)))
-  ).toFixed(1)
+  // Counter details
+  const counterName = (counterInfo?.name as string) ?? 'Counter'
+  const counterLocation = (counterInfo?.location as string) ?? '-'
+  const counterStatus = (counterInfo?.status as string) ?? 'inactive'
+  const counterCapacity = (counterInfo?.capacity as number) ?? 0
+  const staffCount = (statsInfo?.staffCount as number) ?? 0
+  const redeemedToday = (statsInfo?.redeemedToday as number) ?? 0
+  const myRedeemed = (statsInfo?.myRedeemed as number) ?? 0
+  const staffOnDuty = (statsInfo?.staffOnDuty as Record<string, unknown>[]) ?? []
+  const avgPerHour = (statsInfo?.avgPerHour as number) ?? 0
 
-  // Counter capacity usage
-  const capacityPercent = Math.round(
-    (allCounterRedemptions.length / currentCounter.capacity) * 100
-  )
+  // Redemption config
+  const config = (statusData?.config as Record<string, unknown>) ?? {}
+  const configStatus = (config.status as string) ?? 'active'
+  const configStartTime = (config.startTime as string) ?? '08:00'
+  const configEndTime = (config.endTime as string) ?? '16:00'
+  const configStartDate = (config.startDate as string) ?? ''
+  const configEndDate = (config.endDate as string) ?? ''
 
-  const counterStatus = getCounterStatusBadge(currentCounter.status)
+  const capacityPercent = counterCapacity > 0
+    ? Math.round((redeemedToday / counterCapacity) * 100)
+    : 0
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'active':
+        return { label: '● Aktif', color: 'bg-emerald-500/20 text-emerald-400' }
+      case 'closed':
+        return { label: '● Tutup', color: 'bg-red-500/20 text-red-400' }
+      default:
+        return { label: '● Nonaktif', color: 'bg-gray-500/20 text-gray-400' }
+    }
+  }
+
+  const counterStatusBadge = getStatusBadge(counterStatus)
 
   const initials = (name: string) =>
     name
@@ -85,8 +96,8 @@ export function CounterStatus() {
               <Building2 className="h-4 w-4 text-primary" />
               Informasi Counter
             </CardTitle>
-            <Badge className={cn('text-[10px] hover:bg-opacity-80', counterStatus.color)}>
-              {counterStatus.label}
+            <Badge className={cn('text-[10px] hover:bg-opacity-80', counterStatusBadge.color)}>
+              {counterStatusBadge.label}
             </Badge>
           </div>
         </CardHeader>
@@ -94,17 +105,17 @@ export function CounterStatus() {
           <div className="flex items-center gap-4">
             <div className="h-14 w-14 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
               <span className="text-2xl font-bold text-primary">
-                {currentCounter.name.split(' ')[1]}
+                {counterName.split(' ')[1] || '#'}
               </span>
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-lg font-bold text-foreground">
-                {currentCounter.name}
+                {counterName}
               </h3>
               <div className="flex items-center gap-1.5 mt-1">
                 <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">
-                  {currentCounter.location}
+                  {counterLocation}
                 </span>
               </div>
             </div>
@@ -116,21 +127,21 @@ export function CounterStatus() {
             <div className="flex flex-col items-center p-2.5 rounded-lg bg-[#0A0F0E]/80 border border-border/20">
               <Users className="h-4 w-4 text-primary mb-1" />
               <p className="text-lg font-bold text-foreground">
-                {currentCounter.staffCount}
+                {staffCount}
               </p>
               <p className="text-[10px] text-muted-foreground">Staff</p>
             </div>
             <div className="flex flex-col items-center p-2.5 rounded-lg bg-[#0A0F0E]/80 border border-border/20">
               <Gauge className="h-4 w-4 text-amber-400 mb-1" />
               <p className="text-lg font-bold text-foreground">
-                {currentCounter.capacity}
+                {counterCapacity}
               </p>
               <p className="text-[10px] text-muted-foreground">Kapasitas</p>
             </div>
             <div className="flex flex-col items-center p-2.5 rounded-lg bg-[#0A0F0E]/80 border border-border/20">
               <Activity className="h-4 w-4 text-emerald-400 mb-1" />
               <p className="text-lg font-bold text-foreground">
-                {currentCounter.redeemedToday}
+                {redeemedToday}
               </p>
               <p className="text-[10px] text-muted-foreground">Dituksr</p>
             </div>
@@ -180,47 +191,58 @@ export function CounterStatus() {
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {staffOnDuty.map((staff) => (
-              <div
-                key={staff.id}
-                className={cn(
-                  'flex items-center gap-3 p-2.5 rounded-lg border transition-colors',
-                  staff.id === currentStaff.id
-                    ? 'bg-primary/5 border-primary/30'
-                    : 'bg-[#0A0F0E]/50 border-border/20'
-                )}
-              >
-                <div className="h-9 w-9 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                  <span className="text-xs font-bold text-primary">
-                    {initials(staff.name)}
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground truncate">
-                      {staff.name}
-                    </span>
-                    {staff.id === currentStaff.id && (
-                      <Badge className="text-[9px] px-1.5 py-0 bg-primary/20 text-primary hover:bg-primary/20">
-                        Anda
-                      </Badge>
+            {staffOnDuty.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">
+                Tidak ada staff bertugas saat ini
+              </p>
+            ) : (
+              staffOnDuty.map((staff, idx) => {
+                const staffName = String(staff.name ?? 'Unknown')
+                const staffId = String(staff.id ?? idx)
+                const isMe = String(staff.userId ?? '') === String(statsInfo?.currentStaffId ?? '')
+                return (
+                  <div
+                    key={staffId}
+                    className={cn(
+                      'flex items-center gap-3 p-2.5 rounded-lg border transition-colors',
+                      isMe
+                        ? 'bg-primary/5 border-primary/30'
+                        : 'bg-[#0A0F0E]/50 border-border/20'
                     )}
+                  >
+                    <div className="h-9 w-9 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-bold text-primary">
+                        {initials(staffName)}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-foreground truncate">
+                          {staffName}
+                        </span>
+                        {isMe && (
+                          <Badge className="text-[9px] px-1.5 py-0 bg-primary/20 text-primary hover:bg-primary/20">
+                            Anda
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        <span className="text-[10px] text-muted-foreground">
+                          {String(staff.shift ?? '-')}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {String(staff.totalScans ?? 0)} scan
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-[10px] text-emerald-400">Aktif</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3 mt-0.5">
-                    <span className="text-[10px] text-muted-foreground">
-                      {staff.shift === 'pagi' ? 'Pagi' : 'Malam'}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">
-                      {staff.totalScans} scan
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-[10px] text-emerald-400">Aktif</span>
-                </div>
-              </div>
-            ))}
+                )
+              })
+            )}
           </div>
         </CardContent>
       </Card>
@@ -243,7 +265,7 @@ export function CounterStatus() {
                 </span>
               </div>
               <p className="text-2xl font-bold text-primary">
-                {myRedemptions.length}
+                {myRedeemed}
               </p>
             </div>
             <div className="p-3 rounded-lg bg-[#0A0F0E]/80 border border-border/20">
@@ -254,7 +276,7 @@ export function CounterStatus() {
                 </span>
               </div>
               <p className="text-2xl font-bold text-amber-400">
-                {allCounterRedemptions.length}
+                {redeemedToday}
               </p>
             </div>
             <div className="p-3 rounded-lg bg-[#0A0F0E]/80 border border-border/20 col-span-2">
@@ -265,7 +287,7 @@ export function CounterStatus() {
                 </span>
               </div>
               <p className="text-2xl font-bold text-emerald-400">
-                {avgPerHour}
+                {avgPerHour.toFixed(1)}
                 <span className="text-sm font-normal text-muted-foreground ml-1">
                   tiket/jam
                 </span>
@@ -285,28 +307,32 @@ export function CounterStatus() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 rounded-lg bg-[#0A0F0E]/80 border border-border/20">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">
-                  Mulai Tanggal
+            {configStartDate && (
+              <div className="flex items-center justify-between p-3 rounded-lg bg-[#0A0F0E]/80 border border-border/20">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">
+                    Mulai Tanggal
+                  </span>
+                </div>
+                <span className="text-sm font-medium text-foreground">
+                  {new Date(configStartDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
                 </span>
               </div>
-              <span className="text-sm font-medium text-foreground">
-                17 Mei 2025
-              </span>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-[#0A0F0E]/80 border border-border/20">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">
-                  Sampai Tanggal
+            )}
+            {configEndDate && (
+              <div className="flex items-center justify-between p-3 rounded-lg bg-[#0A0F0E]/80 border border-border/20">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">
+                    Sampai Tanggal
+                  </span>
+                </div>
+                <span className="text-sm font-medium text-foreground">
+                  {new Date(configEndDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
                 </span>
               </div>
-              <span className="text-sm font-medium text-foreground">
-                24 Mei 2025
-              </span>
-            </div>
+            )}
             <div className="flex items-center justify-between p-3 rounded-lg bg-[#0A0F0E]/80 border border-border/20">
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-muted-foreground" />
@@ -315,7 +341,7 @@ export function CounterStatus() {
                 </span>
               </div>
               <span className="text-sm font-medium text-foreground">
-                {config.startTime} — {config.endTime} WIB
+                {configStartTime} — {configEndTime} WIB
               </span>
             </div>
             <div className="flex items-center justify-between p-3 rounded-lg bg-[#0A0F0E]/80 border border-border/20">
@@ -328,16 +354,16 @@ export function CounterStatus() {
               <Badge
                 className={cn(
                   'text-[10px] hover:bg-opacity-80',
-                  config.status === 'active'
+                  configStatus === 'active'
                     ? 'bg-emerald-500/20 text-emerald-400'
-                    : config.status === 'upcoming'
+                    : configStatus === 'upcoming'
                       ? 'bg-amber-500/20 text-amber-400'
                       : 'bg-red-500/20 text-red-400'
                 )}
               >
-                {config.status === 'active'
+                {configStatus === 'active'
                   ? '● Sedang Berlangsung'
-                  : config.status === 'upcoming'
+                  : configStatus === 'upcoming'
                     ? 'Belum Mulai'
                     : 'Sudah Selesai'}
               </Badge>
@@ -348,5 +374,3 @@ export function CounterStatus() {
     </div>
   )
 }
-
-

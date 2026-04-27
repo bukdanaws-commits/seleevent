@@ -4,6 +4,8 @@ import { useState, useMemo } from 'react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { id as localeId } from 'date-fns/locale'
+import { useOrganizerRedemptions } from '@/hooks/use-api'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -30,8 +32,19 @@ import {
   ChevronRight,
   Filter,
 } from 'lucide-react'
-import { mockTickets } from '@/lib/admin-mock-data'
-import type { TicketRecord } from '@/lib/admin-mock-data'
+
+// ─── LOCAL TYPES ──────────────────────────────────────────────────────────────
+
+type TicketRecord = {
+  id: string
+  ticketCode: string
+  attendeeName: string
+  ticketTypeName: string
+  zone: string
+  status: 'active' | 'redeemed' | 'inside_venue' | 'cancelled'
+  wristbandCode: string | null
+  redeemedAt: string | null
+}
 
 function getStatusBadge(status: TicketRecord['status']) {
   switch (status) {
@@ -49,6 +62,9 @@ function getStatusBadge(status: TicketRecord['status']) {
 const ITEMS_PER_PAGE = 15
 
 export function RedeemHistoryPage() {
+  const { data: redemptionsData, isLoading, error } = useOrganizerRedemptions('')
+  const mockTickets: TicketRecord[] = (redemptionsData as any)?.data ?? (redemptionsData as any) ?? []
+
   const [ticketTypeFilter, setTicketTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [currentPage, setCurrentPage] = useState(1)
@@ -58,7 +74,7 @@ export function RedeemHistoryPage() {
     return mockTickets.filter(
       (t) => t.status === 'redeemed' || t.status === 'inside_venue'
     )
-  }, [])
+  }, [mockTickets])
 
   // Unique ticket type names
   const ticketTypes = useMemo(() => {
@@ -87,6 +103,9 @@ export function RedeemHistoryPage() {
       description: 'File riwayat penukaran akan diunduh dalam bentuk Excel.',
     })
   }
+
+  if (isLoading) return <div className="p-6 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-40 w-full" /></div>
+  if (error) return <div className="p-6 text-red-500">Failed to load data: {error.message}</div>
 
   // Reset page when filters change
   const handleTicketTypeChange = (value: string) => {

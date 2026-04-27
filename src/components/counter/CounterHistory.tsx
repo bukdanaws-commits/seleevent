@@ -16,23 +16,9 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import {
-  mockStaffUsers,
-  mockCounters,
-  mockRedemptions,
-  wristbandConfigs,
-  formatTime,
-  formatDateTimeShort,
-} from '@/lib/operational-mock-data'
-
-// ============================================================
-// Helpers
-// ============================================================
-
-function getWristbandColorHex(color: string): string {
-  const found = wristbandConfigs.find((w) => w.wristbandColor === color)
-  return found?.wristbandColorHex || '#E5E7EB'
-}
+import { Skeleton } from '@/components/ui/skeleton'
+import { useCounterRedemptions, useCounterStatus } from '@/hooks/use-api'
+import { formatTime } from '@/lib/utils'
 
 // ============================================================
 // Component
@@ -42,17 +28,19 @@ export function CounterHistory() {
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState(false)
 
-  const currentStaff = mockStaffUsers.find((s) => s.id === 'cs-001')!
-  const currentCounter = mockCounters.find((c) => c.id === 'ctr-001')!
+  const { data: redemptionsData, isLoading: redemptionsLoading } = useCounterRedemptions()
+  const { data: statusData } = useCounterStatus()
 
-  // Filter redemptions for this counter + staff
+  const counterInfo = statusData?.counter as Record<string, unknown> | undefined
+  const statsInfo = statusData?.stats as Record<string, unknown> | undefined
+  const counterName = (counterInfo?.name as string) ?? 'Counter'
+  const staffName = (statsInfo?.staffName as string) ?? 'Staff'
+
+  // Extract redemptions list from paginated response
   const myRedemptions = useMemo(() => {
-    return mockRedemptions.filter(
-      (r) =>
-        r.counterName === currentCounter.name &&
-        r.staffName === currentStaff.name
-    )
-  }, [])
+    const data = redemptionsData as { data: unknown[] } | undefined
+    return (data?.data ?? []) as Record<string, unknown>[]
+  }, [redemptionsData])
 
   // Apply search filter
   const filtered = useMemo(() => {
@@ -60,10 +48,10 @@ export function CounterHistory() {
     const q = search.toLowerCase()
     return myRedemptions.filter(
       (r) =>
-        r.attendeeName.toLowerCase().includes(q) ||
-        r.ticketCode.toLowerCase().includes(q) ||
-        r.wristbandCode.toLowerCase().includes(q) ||
-        r.ticketType.toLowerCase().includes(q)
+        String(r.attendeeName ?? '').toLowerCase().includes(q) ||
+        String(r.ticketCode ?? '').toLowerCase().includes(q) ||
+        String(r.wristbandCode ?? '').toLowerCase().includes(q) ||
+        String(r.ticketType ?? '').toLowerCase().includes(q)
     )
   }, [myRedemptions, search])
 
@@ -71,11 +59,17 @@ export function CounterHistory() {
   const displayed = expanded ? filtered : filtered.slice(0, 10)
   const hasMore = filtered.length > 10
 
-  // Get today's date string for filtering
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const todayRedemptions = myRedemptions.filter((r) =>
-    r.redeemedAt.startsWith('2025-05-24')
-  )
+  const todayRedemptions = myRedemptions.length
+
+  if (redemptionsLoading) {
+    return (
+      <div className="flex flex-col gap-4 p-4 max-w-lg mx-auto w-full">
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-10 w-full" />
+        {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full" />)}
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-4 p-4 max-w-lg mx-auto w-full">
@@ -91,7 +85,7 @@ export function CounterHistory() {
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col items-center p-3 rounded-lg bg-[#0A0F0E]/80 border border-border/20">
               <p className="text-2xl font-bold text-primary">
-                {todayRedemptions.length}
+                {todayRedemptions}
               </p>
               <p className="text-[10px] text-muted-foreground mt-1">
                 Total Dituksr
@@ -130,7 +124,7 @@ export function CounterHistory() {
             variant="outline"
             className="text-[10px] text-primary border-primary/30"
           >
-            {currentCounter.name} — {currentStaff.name}
+            {counterName} — {staffName}
           </Badge>
         )}
       </div>
@@ -154,7 +148,7 @@ export function CounterHistory() {
         ) : (
           displayed.map((r, idx) => (
             <Card
-              key={r.id}
+              key={String(r.id ?? idx)}
               className="bg-[#111918] border-border/30 hover:border-primary/30 transition-colors"
             >
               <CardContent className="p-3">
@@ -173,13 +167,13 @@ export function CounterHistory() {
                       <div className="flex items-center gap-2 min-w-0">
                         <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                         <span className="text-sm font-medium text-foreground truncate">
-                          {r.attendeeName}
+                          {String(r.attendeeName ?? '-')}
                         </span>
                       </div>
                       <div className="flex items-center gap-1 shrink-0 ml-2">
                         <Clock className="h-3 w-3 text-muted-foreground" />
                         <span className="text-[10px] text-muted-foreground font-mono">
-                          {formatTime(r.redeemedAt)}
+                          {r.redeemedAt ? formatTime(String(r.redeemedAt)) : '-'}
                         </span>
                       </div>
                     </div>
@@ -192,27 +186,29 @@ export function CounterHistory() {
                           variant="outline"
                           className="text-[10px] px-1.5 py-0 border-border/50"
                         >
-                          {r.ticketType}
+                          {String(r.ticketType ?? '-')}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <Watch className="h-3.5 w-3.5 text-muted-foreground" />
                         <span className="text-[10px] font-mono text-muted-foreground">
-                          {r.wristbandCode}
+                          {String(r.wristbandCode ?? '-')}
                         </span>
                       </div>
                       {/* Wristband color dot */}
-                      <div className="flex items-center gap-1.5">
-                        <div
-                          className="h-3.5 w-3.5 rounded-full border border-white/10"
-                          style={{
-                            backgroundColor: getWristbandColorHex(r.wristbandColor),
-                          }}
-                        />
-                        <span className="text-[10px] text-muted-foreground">
-                          {r.wristbandColor}
-                        </span>
-                      </div>
+                      {r.wristbandColor && (
+                        <div className="flex items-center gap-1.5">
+                          <div
+                            className="h-3.5 w-3.5 rounded-full border border-white/10"
+                            style={{
+                              backgroundColor: String(r.wristbandColorHex ?? '#E5E7EB'),
+                            }}
+                          />
+                          <span className="text-[10px] text-muted-foreground">
+                            {String(r.wristbandColor)}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

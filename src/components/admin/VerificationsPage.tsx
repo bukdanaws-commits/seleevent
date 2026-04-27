@@ -1,13 +1,32 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
-  mockVerifications,
-  type VerificationItem,
-} from '@/lib/admin-mock-data';
-import { formatRupiah } from '@/lib/mock-data';
+  useAdminVerifications,
+} from '@/hooks/use-api';
+import { formatRupiah } from '@/lib/utils';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+
+// ─── LOCAL TYPES ──────────────────────────────────────────────────────────────
+
+type VerificationItem = {
+  id: string;
+  orderCode: string;
+  userName: string;
+  userEmail: string;
+  ticketType: string;
+  quantity: number;
+  totalAmount: number;
+  paymentMethod: string;
+  status: 'queued' | 'in_review' | 'approved' | 'rejected' | 'expired';
+  slaMinutesLeft: number;
+  createdAt: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+};
 
 import {
   Table,
@@ -335,26 +354,22 @@ function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: strin
 // ─── MAIN COMPONENT ────────────────────────────────────────────────────────
 
 export function VerificationsPage() {
+  const { data: verificationsData, isLoading, error } = useAdminVerifications();
+  const verifications: any[] = (verificationsData as any)?.data ?? (verificationsData as any) ?? [];
+
   // ── State ──
-  const [pendingItems, setPendingItems] = useState<VerificationItem[]>(
-    () => mockVerifications.filter((v) => v.status === 'queued' || v.status === 'in_review')
-  );
+  const pendingItems: VerificationItem[] = verifications.filter((v: any) => v.status === 'queued' || v.status === 'in_review');
   const [historyFilter, setHistoryFilter] = useState<string>('all');
   const [historyPage, setHistoryPage] = useState(1);
 
   // ── History items (approved + rejected + expired) ──
-  const historyItems = useMemo(
-    () =>
-      mockVerifications.filter(
-        (v) => v.status === 'approved' || v.status === 'rejected' || v.status === 'expired'
-      ),
-    []
+  const historyItems = verifications.filter(
+    (v: any) => v.status === 'approved' || v.status === 'rejected' || v.status === 'expired'
   );
 
-  const filteredHistory = useMemo(() => {
-    if (historyFilter === 'all') return historyItems;
-    return historyItems.filter((v) => v.status === historyFilter);
-  }, [historyItems, historyFilter]);
+  const filteredHistory = historyFilter === 'all' 
+    ? historyItems 
+    : historyItems.filter((v) => v.status === historyFilter);
 
   const historyTotalPages = Math.max(1, Math.ceil(filteredHistory.length / PAGE_SIZE));
   const safeHistoryPage = Math.min(historyPage, historyTotalPages);
@@ -364,8 +379,8 @@ export function VerificationsPage() {
   );
 
   // ── Stats ──
-  const approvedToday = mockVerifications.filter((v) => v.status === 'approved').length;
-  const rejectedToday = mockVerifications.filter((v) => v.status === 'rejected').length;
+  const approvedToday = verifications.filter((v: any) => v.status === 'approved').length;
+  const rejectedToday = verifications.filter((v: any) => v.status === 'rejected').length;
 
   const stats = [
     {
@@ -411,6 +426,9 @@ export function VerificationsPage() {
   const handleReject = (id: string) => {
     setPendingItems((prev) => prev.filter((v) => v.id !== id));
   };
+
+  if (isLoading) return <div className="p-6 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-40 w-full" /></div>;
+  if (error) return <div className="p-6 text-red-500">Failed to load data: {error.message}</div>;
 
   return (
     <div className="space-y-6">

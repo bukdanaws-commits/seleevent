@@ -42,9 +42,31 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { mockGateStats, mockCheckinLogs, type GateStats, type CheckinLog } from '@/lib/admin-mock-data';
-import { dashboardKPIs } from '@/lib/admin-mock-data';
-import { hourlySalesData } from '@/lib/admin-mock-data';
+import { useAdminGateMonitoring } from '@/hooks/use-api';
+import { Skeleton } from '@/components/ui/skeleton';
+
+// ─── LOCAL TYPES ──────────────────────────────────────────────────────────────
+
+type GateStats = {
+  gateId: string;
+  gateName: string;
+  capacity: number;
+  totalIn: number;
+  totalOut: number;
+  currentInside: number;
+  ratePerMinute: number;
+};
+
+type CheckinLog = {
+  id: string;
+  ticketCode: string;
+  userName: string;
+  ticketType: string;
+  action: 'IN' | 'OUT';
+  gateName: string;
+  scannedBy: string;
+  timestamp: string;
+};
 
 // ─── GATE STAT CARD ──────────────────────────────────────────────────────
 
@@ -162,14 +184,19 @@ function CheckinLogRow({ log }: { log: CheckinLog }) {
 // ─── GATE MONITORING PAGE ────────────────────────────────────────────────
 
 export function GateMonitoringPage() {
+  const { data, isLoading, error } = useAdminGateMonitoring();
   const logContainerRef = useRef<HTMLDivElement>(null);
 
-  const totalInside = mockGateStats.reduce((sum, g) => sum + g.currentInside, 0);
-  const totalIn = mockGateStats.reduce((sum, g) => sum + g.totalIn, 0);
-  const totalOut = mockGateStats.reduce((sum, g) => sum + g.totalOut, 0);
+  const gateStats: GateStats[] = (data as any)?.gateStats ?? [];
+  const checkinLogs: CheckinLog[] = (data as any)?.checkinLogs ?? [];
+  const hourlySales: { hour: string; sales: number }[] = (data as any)?.hourlySales ?? [];
+
+  const totalInside = gateStats.reduce((sum, g) => sum + g.currentInside, 0);
+  const totalIn = gateStats.reduce((sum, g) => sum + g.totalIn, 0);
+  const totalOut = gateStats.reduce((sum, g) => sum + g.totalOut, 0);
   const maxCapacity = 18800;
   const occupancyPct = Math.round((totalInside / maxCapacity) * 100);
-  const latestLogs = mockCheckinLogs.slice(0, 20);
+  const latestLogs = checkinLogs.slice(0, 20);
 
   // Auto-scroll effect for log stream
   useEffect(() => {
@@ -178,7 +205,7 @@ export function GateMonitoringPage() {
     }
   }, [latestLogs]);
 
-  const chartData = hourlySalesData.map((d) => ({
+  const chartData = hourlySales.map((d) => ({
     hour: d.hour,
     entries: d.sales * 12,
   }));
@@ -186,6 +213,9 @@ export function GateMonitoringPage() {
   const handleRefresh = () => {
     toast.success('Data monitoring diperbarui');
   };
+
+  if (isLoading) return <div className="p-6 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-40 w-full" /></div>;
+  if (error) return <div className="p-6 text-red-500">Failed to load data: {error.message}</div>;
 
   return (
     <div className="space-y-6">
@@ -229,7 +259,7 @@ export function GateMonitoringPage() {
 
       {/* ═══ GATE STAT CARDS ═══ */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {mockGateStats.map((gate) => (
+        {gateStats.map((gate) => (
           <GateStatCard key={gate.gateId} gate={gate} />
         ))}
       </div>

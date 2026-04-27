@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { useAuthStore } from '@/lib/auth-store'
 
 // ============================================================
 // Navigation Config
@@ -46,11 +47,15 @@ interface OrganizerLayoutProps {
 export function OrganizerLayout({ children }: OrganizerLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
+  const { user, logout } = useAuthStore()
 
   const isActive = (href: string) => {
     if (href === '/organizer/dashboard') return pathname === '/organizer/dashboard'
     return pathname.startsWith(href)
   }
+
+  const staffName = user?.name ?? 'Organizer'
+  const staffRole = user?.role === 'ORGANIZER' ? 'Organizer' : (user?.role === 'ADMIN' ? 'Admin' : String(user?.role ?? ''))
 
   return (
     <div className="min-h-screen bg-[#0A0F0E]">
@@ -93,12 +98,12 @@ export function OrganizerLayout({ children }: OrganizerLayoutProps) {
           <div className="flex items-center gap-2.5">
             <Avatar className="h-8 w-8">
               <AvatarFallback className="bg-[#00A39D]/20 text-[#00A39D] text-xs font-bold">
-                AS
+                {staffName.split(' ').map(n => n[0]).join('').slice(0, 2)}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">Andi Setiawan</p>
-              <p className="text-[11px] text-[#7FB3AE] truncate">Organizer</p>
+              <p className="text-sm font-medium text-white truncate">{staffName}</p>
+              <p className="text-[11px] text-[#7FB3AE] truncate">{staffRole}</p>
             </div>
           </div>
         </div>
@@ -158,9 +163,9 @@ export function OrganizerLayout({ children }: OrganizerLayoutProps) {
               {/* User info in header */}
               <div className="hidden sm:flex items-center gap-2 text-xs text-[#7FB3AE]">
                 <User className="w-3.5 h-3.5" />
-                <span>Andi Setiawan</span>
+                <span>{staffName}</span>
                 <Separator orientation="vertical" className="h-3 bg-white/10" />
-                <span className="text-[#00A39D] font-medium">Organizer</span>
+                <span className="text-[#00A39D] font-medium">{staffRole}</span>
               </div>
             </div>
           </div>

@@ -4,6 +4,7 @@ import (
         "fmt"
         "log"
         "strings"
+        "time"
 
         "github.com/bukdanaws-commits/seleevent/backend/internal/config"
         "github.com/bukdanaws-commits/seleevent/backend/internal/models"
@@ -50,7 +51,7 @@ func Connect(cfg config.Config) (*gorm.DB, error) {
                 }
                 sqlDB.SetMaxOpenConns(25)
                 sqlDB.SetMaxIdleConns(10)
-                sqlDB.SetConnMaxLifetime(300) // 5 minutes
+                sqlDB.SetConnMaxLifetime(5 * time.Minute)
 
         case "sqlite":
                 db, err = gorm.Open(sqlite.Open(cfg.DB.SQLitePath), &gorm.Config{})

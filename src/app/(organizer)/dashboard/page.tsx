@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Users,
   CheckCircle2,
@@ -21,27 +22,42 @@ import {
   Clock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import {
-  liveStats,
-  mockRedemptions,
-  mockGates,
-  mockCounters,
-  wristbandConfigs,
-} from '@/lib/operational-mock-data'
-import { formatRupiah } from '@/lib/mock-data'
-import { mockTickets, salesByTier } from '@/lib/admin-mock-data'
+import { useOrganizerDashboard, useOrganizerCounters, useOrganizerGates, useOrganizerRedemptions } from '@/hooks/use-api'
+import { formatRupiah, formatTime } from '@/lib/utils'
+
+const EVENT_SLUG = 'sheila-on-7-melompat-lebih-tinggi'
 
 export default function DashboardPage() {
-  const totalTicketsSold = mockTickets.length
-  const totalRedeemed = mockTickets.filter(t => t.status === 'redeemed' || t.status === 'inside').length
-  const totalInside = mockTickets.filter(t => t.status === 'inside').length
-  const activeCounters = mockCounters.filter(c => c.status === 'active').length
-  const activeGates = mockGates.filter(g => g.status === 'active').length
-  const occupancyRate = totalTicketsSold > 0 ? Math.round((totalInside / totalTicketsSold) * 100) : 0
-  const avgSpeed = activeGates > 0 ? Math.round(liveStats.totalGateScans / activeGates / 120) : 0
-  const totalRevenue = salesByTier.reduce((sum, s) => sum + s.revenue, 0)
+  const { data: dashboardData, isLoading: dashboardLoading } = useOrganizerDashboard(EVENT_SLUG)
+  const { data: countersData } = useOrganizerCounters(EVENT_SLUG)
+  const { data: gatesData } = useOrganizerGates(EVENT_SLUG)
+  const { data: redemptionsData } = useOrganizerRedemptions(EVENT_SLUG)
 
-  const recentRedemptions = mockRedemptions.slice(0, 5)
+  // Extract dashboard data
+  const dashboard = dashboardData as Record<string, unknown> | undefined
+  const kpis = dashboard?.kpis as Record<string, unknown> | undefined
+  const liveStats = dashboard?.liveStats as Record<string, unknown> | undefined
+
+  const totalTicketsSold = (kpis?.totalTicketsSold as number) ?? 0
+  const totalRedeemed = (kpis?.totalRedeemed as number) ?? 0
+  const totalInside = (kpis?.totalInside as number) ?? 0
+  const totalRevenue = (kpis?.totalRevenue as number) ?? 0
+
+  // Counters
+  const counters = ((countersData as { data: unknown[] } | undefined)?.data ?? []) as Record<string, unknown>[]
+  const activeCounters = counters.filter(c => String(c.status) === 'active').length
+
+  // Gates
+  const gates = ((gatesData as { data: unknown[] } | undefined)?.data ?? []) as Record<string, unknown>[]
+  const activeGates = gates.filter(g => String(g.status) === 'active').length
+
+  // Recent redemptions
+  const redemptions = ((redemptionsData as { data: unknown[] } | undefined)?.data ?? []) as Record<string, unknown>[]
+  const recentRedemptions = redemptions.slice(0, 5)
+
+  // Computed stats
+  const occupancyRate = totalTicketsSold > 0 ? Math.round((totalInside / totalTicketsSold) * 100) : 0
+  const avgSpeed = activeGates > 0 ? Math.round(((liveStats?.totalGateScans as number) ?? 0) / activeGates / 120) : 0
 
   const primaryKpis = [
     { label: 'Total Peserta', value: totalTicketsSold, icon: Users, color: 'text-white', bg: 'bg-gradient-to-br from-[#00A39D] to-[#00A39D]/70' },
@@ -63,12 +79,24 @@ export default function DashboardPage() {
     { title: 'Cek Tiket', href: '/organizer/check-ticket', icon: Search, desc: 'Cari data peserta' },
   ]
 
+  if (dashboardLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-60" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[1,2,3,4].map(i => <Skeleton key={i} className="h-24" />)}
+        </div>
+        <Skeleton className="h-48 w-full" />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
       <div>
         <h1 className="text-2xl md:text-3xl font-bold text-white">Dashboard</h1>
-        <p className="text-[#7FB3AE] mt-1">Ringkasan operasional hari ini — 24 Mei 2025</p>
+        <p className="text-[#7FB3AE] mt-1">Ringkasan operasional hari ini</p>
       </div>
 
       {/* Primary KPI Cards */}
@@ -158,38 +186,41 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent className="pt-0">
           <div className="space-y-2">
-            {recentRedemptions.map((r) => {
-              const wbConfig = wristbandConfigs.find(w => w.ticketTypeName === r.ticketType)
-              return (
-                <div key={r.id} className="flex items-center gap-3 p-3 rounded-lg bg-[#0A0F0E]/60 border border-white/5">
+            {recentRedemptions.length === 0 ? (
+              <p className="text-sm text-[#7FB3AE] text-center py-4">Belum ada aktivitas penukaran</p>
+            ) : (
+              recentRedemptions.map((r, idx) => (
+                <div key={String(r.id ?? idx)} className="flex items-center gap-3 p-3 rounded-lg bg-[#0A0F0E]/60 border border-white/5">
                   <div
                     className="w-9 h-9 rounded-full shrink-0 border-2 border-white/10 flex items-center justify-center"
-                    style={{ backgroundColor: wbConfig?.wristbandColorHex || '#555' }}
+                    style={{ backgroundColor: String(r.wristbandColorHex ?? '#555') }}
                   >
                     <CheckCircle2 className="h-4 w-4 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm text-white font-medium truncate">{r.attendeeName}</p>
+                      <p className="text-sm text-white font-medium truncate">{String(r.attendeeName ?? '-')}</p>
                       <Badge className="text-[9px] px-1.5 py-0 bg-[#00A39D]/15 text-[#00A39D] border-[#00A39D]/20">
-                        {r.ticketType}
+                        {String(r.ticketType ?? r.ticketTypeName ?? '-')}
                       </Badge>
                     </div>
                     <div className="flex items-center gap-2 text-[11px] text-[#7FB3AE] mt-0.5">
-                      <span className="font-mono">{r.wristbandCode}</span>
+                      <span className="font-mono">{String(r.wristbandCode ?? '-')}</span>
                       <span>•</span>
-                      <span>{r.counterName}</span>
+                      <span>{String(r.counterName ?? '-')}</span>
                       <span>•</span>
-                      <span>{r.staffName}</span>
+                      <span>{String(r.staffName ?? '-')}</span>
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-[11px] text-[#7FB3AE]">{new Date(r.redeemedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</p>
-                    <p className="text-xs font-semibold text-white">{formatRupiah(r.price)}</p>
+                    <p className="text-[11px] text-[#7FB3AE]">
+                      {r.redeemedAt ? formatTime(String(r.redeemedAt)) : '-'}
+                    </p>
+                    <p className="text-xs font-semibold text-white">{formatRupiah((r.price as number) ?? 0)}</p>
                   </div>
                 </div>
-              )
-            })}
+              ))
+            )}
           </div>
         </CardContent>
       </Card>

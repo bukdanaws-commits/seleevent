@@ -3,13 +3,9 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { QrCode, List, Shield, User, BarChart3 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { mockStaffUsers, mockGates, getGateTypeBadge } from '@/lib/operational-mock-data'
+import { useGateProfile } from '@/hooks/use-api'
+import { useAuthStore } from '@/lib/auth-store'
 import type React from 'react'
-
-// Hardcoded current staff & gate context for demo
-const currentStaff = mockStaffUsers.find(s => s.id === 'gs-001')!
-const currentGate = mockGates.find(g => g.id === 'gate-a')!
-const gateTypeBadge = getGateTypeBadge(currentGate.type)
 
 interface NavItem {
   href: string
@@ -28,6 +24,31 @@ const navItems: NavItem[] = [
 export function GateLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const { user } = useAuthStore()
+  const { data: profileData } = useGateProfile()
+
+  const profile = profileData as Record<string, unknown> | undefined
+  const gateInfo = profile?.gate as Record<string, unknown> | undefined
+  const staffInfo = profile?.staff as Record<string, unknown> | undefined
+
+  const gateName = (gateInfo?.name as string) ?? 'Gate'
+  const gateLocation = (gateInfo?.location as string) ?? ''
+  const gateStatus = (gateInfo?.status as string) ?? 'active'
+  const gateType = (gateInfo?.type as string) ?? 'both'
+  const staffName = user?.name ?? (staffInfo?.name as string) ?? 'Gate Staff'
+
+  const getGateTypeBadge = (type: string) => {
+    switch (type) {
+      case 'entry':
+        return { label: 'MASUK', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' }
+      case 'exit':
+        return { label: 'KELUAR', color: 'bg-red-500/20 text-red-400 border-red-500/30' }
+      default:
+        return { label: 'MASUK / KELUAR', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' }
+    }
+  }
+
+  const gateTypeBadge = getGateTypeBadge(gateType)
 
   return (
     <div className="flex flex-col h-dvh bg-[#0A0F0E] text-white max-w-md mx-auto relative overflow-hidden">
@@ -41,7 +62,7 @@ export function GateLayout({ children }: { children: React.ReactNode }) {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-sm font-bold tracking-tight">{currentGate.name}</h1>
+                <h1 className="text-sm font-bold tracking-tight">{gateName}</h1>
                 <span
                   className={cn(
                     'text-[10px] font-semibold px-1.5 py-0.5 rounded-full border',
@@ -52,7 +73,7 @@ export function GateLayout({ children }: { children: React.ReactNode }) {
                 </span>
               </div>
               <p className="text-[11px] text-[#7FB3AE] leading-tight">
-                {currentGate.location} · {currentGate.status === 'active' ? 'Aktif' : 'Nonaktif'}
+                {gateLocation} · {gateStatus === 'active' ? 'Aktif' : 'Nonaktif'}
               </p>
             </div>
           </div>
@@ -60,7 +81,7 @@ export function GateLayout({ children }: { children: React.ReactNode }) {
           {/* Right: Staff avatar */}
           <div className="flex items-center gap-2">
             <div className="text-right hidden sm:block">
-              <p className="text-xs font-medium leading-tight">{currentStaff.name}</p>
+              <p className="text-xs font-medium leading-tight">{staffName}</p>
               <p className="text-[10px] text-[#7FB3AE]">Gate Staff</p>
             </div>
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#00A39D]/20 text-[#00A39D] text-xs font-bold">

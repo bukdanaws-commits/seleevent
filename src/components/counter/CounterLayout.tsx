@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
+import { useCounterStatus } from '@/hooks/use-api'
+import { useAuthStore } from '@/lib/auth-store'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,16 +50,21 @@ interface CounterLayoutProps {
 export function CounterLayout({ children }: CounterLayoutProps) {
   const pathname = usePathname()
   const router = useRouter()
+  const { user } = useAuthStore()
+  const { data: statusData } = useCounterStatus()
 
   const isActive = (href: string) => {
     if (href === '/counter') return pathname === '/counter'
     return pathname.startsWith(href)
   }
 
-  // Hardcoded current staff for demo
-  const staffName = 'Rina Wulandari'
-  const counterName = 'Counter 1'
-  const shift = 'Pagi (08:00 - 16:00)'
+  // Get staff/counter info from API
+  const counterInfo = statusData?.counter as Record<string, unknown> | undefined
+  const statsInfo = statusData?.stats as Record<string, unknown> | undefined
+
+  const staffName = user?.name ?? (statsInfo?.staffName as string) ?? 'Counter Staff'
+  const counterName = (counterInfo?.name as string) ?? 'Counter'
+  const shift = (statsInfo?.shift as string) ?? ''
 
   const initials = staffName
     .split(' ')

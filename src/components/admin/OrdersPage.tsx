@@ -1,13 +1,11 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import {
-  mockAdminOrders,
-  type AdminOrder,
-  paymentMethodBreakdown,
-} from '@/lib/admin-mock-data';
-import { formatRupiah } from '@/lib/mock-data';
 import { cn } from '@/lib/utils';
+import { formatRupiah, formatDateTime } from '@/lib/utils';
+import { useAdminOrders } from '@/hooks/use-api';
+import { useAdminDashboard } from '@/hooks/use-api';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 
 import {
@@ -67,6 +65,7 @@ import {
   Calendar,
   TrendingUp,
   CircleDot,
+  AlertTriangle,
 } from 'lucide-react';
 
 // ─── CONSTANTS ──────────────────────────────────────────────────────────────
@@ -86,55 +85,36 @@ const TICKET_TYPES = [
 
 // ─── STATUS HELPERS ─────────────────────────────────────────────────────────
 
-function getStatusBadge(status: AdminOrder['status']) {
-  const config: Record<
-    AdminOrder['status'],
-    { label: string; className: string }
-  > = {
+function getStatusBadge(status: string) {
+  const config: Record<string, { label: string; className: string }> = {
     paid: {
       label: 'Paid',
-      className:
-        'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25',
+      className: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25',
     },
     pending: {
       label: 'Pending',
-      className:
-        'bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/25',
+      className: 'bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/25',
     },
     rejected: {
       label: 'Rejected',
-      className:
-        'bg-red-500/15 text-red-400 border-red-500/30 hover:bg-red-500/25',
+      className: 'bg-red-500/15 text-red-400 border-red-500/30 hover:bg-red-500/25',
     },
     cancelled: {
       label: 'Cancelled',
-      className:
-        'bg-gray-500/15 text-gray-400 border-gray-500/30 hover:bg-gray-500/25',
+      className: 'bg-gray-500/15 text-gray-400 border-gray-500/30 hover:bg-gray-500/25',
     },
     expired: {
       label: 'Expired',
-      className:
-        'bg-gray-500/15 text-gray-400 border-gray-500/30 hover:bg-gray-500/25',
+      className: 'bg-gray-500/15 text-gray-400 border-gray-500/30 hover:bg-gray-500/25',
     },
   };
-  const c = config[status];
+  const c = config[status] || config.pending;
   return <Badge variant="outline" className={cn('text-xs font-semibold', c.className)}>{c.label}</Badge>;
-}
-
-function formatDateTime(dateStr: string) {
-  if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleDateString('id-ID', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 // ─── ORDER DETAIL DIALOG ───────────────────────────────────────────────────
 
-function OrderDetailDialog({ order }: { order: AdminOrder }) {
+function OrderDetailDialog({ order }: { order: Record<string, unknown> }) {
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -150,7 +130,7 @@ function OrderDetailDialog({ order }: { order: AdminOrder }) {
             Detail Pesanan
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            Informasi lengkap pesanan {order.orderCode}
+            Informasi lengkap pesanan {String(order.orderCode || order.id || '')}
           </DialogDescription>
         </DialogHeader>
 
@@ -159,11 +139,11 @@ function OrderDetailDialog({ order }: { order: AdminOrder }) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wider">Kode Pesanan</p>
-              <p className="text-base font-mono font-bold text-[#00A39D]">{order.orderCode}</p>
+              <p className="text-base font-mono font-bold text-[#00A39D]">{String(order.orderCode || order.id || '')}</p>
             </div>
             <div className="text-right">
               <p className="text-xs text-muted-foreground uppercase tracking-wider">Status</p>
-              {getStatusBadge(order.status)}
+              {getStatusBadge(String(order.status || ''))}
             </div>
           </div>
 
@@ -178,17 +158,17 @@ function OrderDetailDialog({ order }: { order: AdminOrder }) {
             <CardContent className="px-4 pb-4">
               <div className="flex items-center justify-between rounded-lg bg-[rgba(0,163,157,0.05)] p-3">
                 <div>
-                  <p className="text-white font-medium text-sm">{order.ticketType}</p>
-                  <p className="text-muted-foreground text-xs mt-0.5">{formatRupiah(order.pricePerTicket)} / tiket</p>
+                  <p className="text-white font-medium text-sm">{String(order.ticketType || (order.items as Record<string, unknown>[])?.[0]?.ticketType || 'N/A')}</p>
+                  <p className="text-muted-foreground text-xs mt-0.5">{formatRupiah(Number(order.pricePerTicket || 0))} / tiket</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-white font-semibold">x{order.quantity}</p>
-                  <p className="text-[#F8AD3C] font-bold text-sm mt-0.5">{formatRupiah(order.totalAmount)}</p>
+                  <p className="text-white font-semibold">x{Number(order.quantity || 0)}</p>
+                  <p className="text-[#F8AD3C] font-bold text-sm mt-0.5">{formatRupiah(Number(order.totalAmount || 0))}</p>
                 </div>
               </div>
               <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/5">
                 <p className="text-muted-foreground text-sm font-medium">Total Pembayaran</p>
-                <p className="text-white font-bold text-lg">{formatRupiah(order.totalAmount)}</p>
+                <p className="text-white font-bold text-lg">{formatRupiah(Number(order.totalAmount || 0))}</p>
               </div>
             </CardContent>
           </Card>
@@ -206,21 +186,21 @@ function OrderDetailDialog({ order }: { order: AdminOrder }) {
                 <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                 <div>
                   <p className="text-xs text-muted-foreground">Nama</p>
-                  <p className="text-white text-sm font-medium">{order.userName}</p>
+                  <p className="text-white text-sm font-medium">{String((order.user as Record<string, unknown>)?.name || order.userName || '—')}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                 <div>
                   <p className="text-xs text-muted-foreground">Email</p>
-                  <p className="text-white text-sm font-medium">{order.userEmail}</p>
+                  <p className="text-white text-sm font-medium">{String((order.user as Record<string, unknown>)?.email || order.userEmail || '—')}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <Calendar className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                 <div>
                   <p className="text-xs text-muted-foreground">Tanggal Order</p>
-                  <p className="text-white text-sm font-medium">{formatDateTime(order.createdAt)}</p>
+                  <p className="text-white text-sm font-medium">{formatDateTime(String(order.createdAt || ''))}</p>
                 </div>
               </div>
             </CardContent>
@@ -239,118 +219,18 @@ function OrderDetailDialog({ order }: { order: AdminOrder }) {
                 <CreditCard className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                 <div>
                   <p className="text-xs text-muted-foreground">Metode Pembayaran</p>
-                  <p className="text-white text-sm font-medium">{order.paymentMethod}</p>
+                  <p className="text-white text-sm font-medium">{String(order.paymentMethod || order.paymentType || '—')}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                <div>
-                  <p className="text-xs text-muted-foreground">Bukti Transfer</p>
-                  <p className="text-sm font-medium">
-                    {order.proofUploaded ? (
-                      <span className="text-emerald-400">✓ Uploaded</span>
-                    ) : (
-                      <span className="text-red-400">✗ Belum upload</span>
-                    )}
-                  </p>
-                </div>
-              </div>
-              {order.verifiedBy && (
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Diverifikasi oleh</p>
-                    <p className="text-white text-sm font-medium">{order.verifiedBy}</p>
-                  </div>
-                </div>
-              )}
               {order.paidAt && (
                 <div className="flex items-center gap-3">
                   <CircleDot className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                   <div>
                     <p className="text-xs text-muted-foreground">Tanggal Bayar</p>
-                    <p className="text-white text-sm font-medium">{formatDateTime(order.paidAt)}</p>
+                    <p className="text-white text-sm font-medium">{formatDateTime(String(order.paidAt))}</p>
                   </div>
                 </div>
               )}
-              {order.rejectionReason && (
-                <div className="mt-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20">
-                  <p className="text-xs text-red-400 font-medium mb-0.5">Alasan Penolakan:</p>
-                  <p className="text-red-300 text-sm">{order.rejectionReason}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Timeline */}
-          <Card className="bg-[#0A0F0E] border-[rgba(0,163,157,0.08)]">
-            <CardHeader className="pb-2 pt-4 px-4">
-              <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-[#00A39D]" />
-                Timeline
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <div className="relative space-y-3 ml-1">
-                {/* Vertical line */}
-                <div className="absolute left-[5px] top-2 bottom-2 w-px bg-white/10" />
-
-                <TimelineItem
-                  label="Pesanan dibuat"
-                  time={order.createdAt}
-                  active
-                />
-                <TimelineItem
-                  label="Batas waktu pembayaran"
-                  time={order.expiresAt}
-                  icon={<TimerReset className="w-3 h-3" />}
-                  active={order.status === 'pending'}
-                />
-                {order.proofUploaded && (
-                  <TimelineItem
-                    label="Bukti transfer diupload"
-                    time={order.createdAt}
-                    icon={<FileText className="w-3 h-3" />}
-                    active={order.status === 'pending'}
-                  />
-                )}
-                {order.status === 'paid' && (
-                  <>
-                    <TimelineItem
-                      label="Pembayaran diverifikasi"
-                      time={order.verifiedAt || order.createdAt}
-                      icon={<CheckCircle2 className="w-3 h-3" />}
-                      active
-                      color="text-emerald-400"
-                    />
-                    <TimelineItem
-                      label="Tiket diterbitkan"
-                      time={order.paidAt || order.createdAt}
-                      icon={<CheckCircle2 className="w-3 h-3" />}
-                      active
-                      color="text-emerald-400"
-                    />
-                  </>
-                )}
-                {order.status === 'rejected' && (
-                  <TimelineItem
-                    label="Pembayaran ditolak"
-                    time={order.verifiedAt || order.createdAt}
-                    icon={<XCircle className="w-3 h-3" />}
-                    active
-                    color="text-red-400"
-                  />
-                )}
-                {(order.status === 'cancelled' || order.status === 'expired') && (
-                  <TimelineItem
-                    label={`Pesanan ${order.status === 'expired' ? 'kadaluarsa' : 'dibatalkan'}`}
-                    time={order.expiresAt}
-                    icon={<Ban className="w-3 h-3" />}
-                    active
-                    color="text-gray-400"
-                  />
-                )}
-              </div>
             </CardContent>
           </Card>
         </div>
@@ -407,19 +287,25 @@ export function OrdersPage() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
 
+  const { data: ordersResponse, isLoading, error } = useAdminOrders();
+  const { data: dashboardData } = useAdminDashboard();
+
+  const allOrders = ((ordersResponse as { data?: unknown[] } | undefined)?.data || []) as Record<string, unknown>[];
+  const kpis = dashboardData as Record<string, unknown> | undefined;
+
   // ── Filtered orders ──
   const filteredOrders = useMemo(() => {
-    return mockAdminOrders.filter((order) => {
+    return allOrders.filter((order) => {
       const matchStatus = statusFilter === 'all' || order.status === statusFilter;
-      const matchTicket = ticketFilter === 'all' || order.ticketType === ticketFilter;
+      const matchTicket = ticketFilter === 'all' || order.ticketType === ticketFilter || (order.items as Record<string, unknown>[])?.[0]?.ticketType === ticketFilter;
       const q = searchQuery.toLowerCase().trim();
       const matchSearch =
         !q ||
-        order.orderCode.toLowerCase().includes(q) ||
-        order.userName.toLowerCase().includes(q);
+        String(order.orderCode || '').toLowerCase().includes(q) ||
+        String((order.user as Record<string, unknown>)?.name || order.userName || '').toLowerCase().includes(q);
       return matchStatus && matchTicket && matchSearch;
     });
-  }, [statusFilter, ticketFilter, searchQuery]);
+  }, [allOrders, statusFilter, ticketFilter, searchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);
@@ -429,28 +315,17 @@ export function OrdersPage() {
   );
 
   // ── Stats ──
-  const totalRevenue = mockAdminOrders
+  const totalRevenue = allOrders
     .filter((o) => o.status === 'paid')
-    .reduce((sum, o) => sum + o.totalAmount, 0);
-  const paidCount = mockAdminOrders.filter((o) => o.status === 'paid').length;
-  const pendingCount = mockAdminOrders.filter((o) => o.status === 'pending').length;
-  const rejectedCount = mockAdminOrders.filter((o) => o.status === 'rejected').length;
-
-  // ── Payment breakdown ──
-  const qrisTotal = paymentMethodBreakdown
-    .filter((p) => p.method.startsWith('QRIS'))
-    .reduce((s, p) => s + p.count, 0);
-  const transferTotal = paymentMethodBreakdown
-    .filter((p) => p.method.startsWith('Transfer'))
-    .reduce((s, p) => s + p.count, 0);
-  const totalPayments = qrisTotal + transferTotal;
-  const qrisPct = totalPayments > 0 ? Math.round((qrisTotal / totalPayments) * 100) : 0;
-  const transferPct = totalPayments > 0 ? Math.round((transferTotal / totalPayments) * 100) : 0;
+    .reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
+  const paidCount = allOrders.filter((o) => o.status === 'paid').length;
+  const pendingCount = allOrders.filter((o) => o.status === 'pending').length;
+  const rejectedCount = allOrders.filter((o) => o.status === 'rejected').length;
 
   const stats = [
     {
       label: 'Total Orders',
-      value: mockAdminOrders.length,
+      value: allOrders.length,
       icon: ShoppingCart,
       color: 'text-[#00A39D]',
       bg: 'bg-[rgba(0,163,157,0.1)]',
@@ -485,16 +360,28 @@ export function OrdersPage() {
     },
   ];
 
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center space-y-3">
+          <AlertTriangle className="w-10 h-10 text-red-400 mx-auto" />
+          <p className="text-red-400 font-medium">Failed to load orders</p>
+          <p className="text-muted-foreground text-sm">{String(error)}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* ═══ PAGE HEADER ═══ */}
       <div>
         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
           <ShoppingCart className="w-6 h-6 text-[#00A39D]" />
-          Orders & Payments
+          Orders &amp; Payments
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Kelola semua pesanan dan pembayaran tiket Sheila On 7 — Jakarta
+          Kelola semua pesanan dan pembayaran tiket
         </p>
       </div>
 
@@ -529,8 +416,8 @@ export function OrdersPage() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">QRIS</p>
-              <p className="text-white font-bold text-lg">{qrisTotal}</p>
-              <p className="text-[10px] text-muted-foreground">{qrisPct}% dari total</p>
+              <p className="text-white font-bold text-lg">{allOrders.filter(o => String(o.paymentType || o.paymentMethod || '').includes('QRIS')).length}</p>
+              <p className="text-[10px] text-muted-foreground">transaksi</p>
             </div>
           </CardContent>
         </Card>
@@ -541,8 +428,8 @@ export function OrdersPage() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Transfer Bank</p>
-              <p className="text-white font-bold text-lg">{transferTotal}</p>
-              <p className="text-[10px] text-muted-foreground">{transferPct}% dari total</p>
+              <p className="text-white font-bold text-lg">{allOrders.filter(o => String(o.paymentType || o.paymentMethod || '').includes('Transfer') || String(o.paymentType || o.paymentMethod || '').includes('bank')).length}</p>
+              <p className="text-[10px] text-muted-foreground">transaksi</p>
             </div>
           </CardContent>
         </Card>
@@ -554,12 +441,12 @@ export function OrdersPage() {
             <div>
               <p className="text-xs text-muted-foreground">Success Rate</p>
               <p className="text-emerald-400 font-bold text-lg">
-                {mockAdminOrders.length > 0
-                  ? Math.round((paidCount / mockAdminOrders.length) * 100)
+                {allOrders.length > 0
+                  ? Math.round((paidCount / allOrders.length) * 100)
                   : 0}
                 %
               </p>
-              <p className="text-[10px] text-muted-foreground">{paidCount} dari {mockAdminOrders.length} order</p>
+              <p className="text-[10px] text-muted-foreground">{paidCount} dari {allOrders.length} order</p>
             </div>
           </CardContent>
         </Card>
@@ -648,106 +535,93 @@ export function OrdersPage() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-[rgba(0,163,157,0.08)] hover:bg-transparent">
-                  <TableHead className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold h-10 px-4">
-                    Kode Order
-                  </TableHead>
-                  <TableHead className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold h-10 px-4">
-                    Pembeli
-                  </TableHead>
-                  <TableHead className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold h-10 px-4">
-                    Tipe Tiket
-                  </TableHead>
-                  <TableHead className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold h-10 px-4 text-center">
-                    Qty
-                  </TableHead>
-                  <TableHead className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold h-10 px-4 text-right">
-                    Total
-                  </TableHead>
-                  <TableHead className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold h-10 px-4">
-                    Metode
-                  </TableHead>
-                  <TableHead className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold h-10 px-4">
-                    Status
-                  </TableHead>
-                  <TableHead className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold h-10 px-4">
-                    Tanggal
-                  </TableHead>
-                  <TableHead className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold h-10 px-4 text-center">
-                    Aksi
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pagedOrders.length === 0 ? (
-                  <TableRow className="border-[rgba(0,163,157,0.05)]">
-                    <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
-                      <Search className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      <p className="text-sm">Tidak ada pesanan ditemukan</p>
-                      <p className="text-xs text-muted-foreground/60 mt-1">
-                        Coba ubah filter atau kata kunci pencarian
-                      </p>
-                    </TableCell>
+          {isLoading ? (
+            <div className="p-6 space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-[rgba(0,163,157,0.08)] hover:bg-transparent">
+                    <TableHead className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold h-10 px-4">Kode Order</TableHead>
+                    <TableHead className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold h-10 px-4">Pembeli</TableHead>
+                    <TableHead className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold h-10 px-4">Tipe Tiket</TableHead>
+                    <TableHead className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold h-10 px-4 text-center">Qty</TableHead>
+                    <TableHead className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold h-10 px-4 text-right">Total</TableHead>
+                    <TableHead className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold h-10 px-4">Metode</TableHead>
+                    <TableHead className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold h-10 px-4">Status</TableHead>
+                    <TableHead className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold h-10 px-4">Tanggal</TableHead>
+                    <TableHead className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold h-10 px-4 text-center">Aksi</TableHead>
                   </TableRow>
-                ) : (
-                  pagedOrders.map((order) => (
-                    <TableRow
-                      key={order.id}
-                      className="border-[rgba(0,163,157,0.05)] hover:bg-[rgba(0,163,157,0.04)] transition-colors"
-                    >
-                      <TableCell className="px-4 py-3">
-                        <span className="font-mono text-xs font-semibold text-[#00A39D]">
-                          {order.orderCode.slice(-8)}
-                        </span>
-                        <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                          ...{order.orderCode.slice(0, 16)}
+                </TableHeader>
+                <TableBody>
+                  {pagedOrders.length === 0 ? (
+                    <TableRow className="border-[rgba(0,163,157,0.05)]">
+                      <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                        <Search className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                        <p className="text-sm">Tidak ada pesanan ditemukan</p>
+                        <p className="text-xs text-muted-foreground/60 mt-1">
+                          Coba ubah filter atau kata kunci pencarian
                         </p>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <p className="text-sm text-white font-medium truncate max-w-[140px]">
-                          {order.userName}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground truncate max-w-[140px]">
-                          {order.userEmail}
-                        </p>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] bg-[rgba(0,163,157,0.06)] border-[rgba(0,163,157,0.2)] text-[#7FB3AE]"
-                        >
-                          {order.ticketType}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="px-4 py-3 text-center">
-                        <span className="text-sm text-white font-semibold">{order.quantity}</span>
-                      </TableCell>
-                      <TableCell className="px-4 py-3 text-right">
-                        <span className="text-sm text-white font-semibold">
-                          {formatRupiah(order.totalAmount)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <p className="text-xs text-muted-foreground">{order.paymentMethod}</p>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">{getStatusBadge(order.status)}</TableCell>
-                      <TableCell className="px-4 py-3">
-                        <p className="text-xs text-muted-foreground">
-                          {formatDateTime(order.createdAt)}
-                        </p>
-                      </TableCell>
-                      <TableCell className="px-4 py-3 text-center">
-                        <OrderDetailDialog order={order} />
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  ) : (
+                    pagedOrders.map((order) => (
+                      <TableRow
+                        key={String(order.id)}
+                        className="border-[rgba(0,163,157,0.05)] hover:bg-[rgba(0,163,157,0.04)] transition-colors"
+                      >
+                        <TableCell className="px-4 py-3">
+                          <span className="font-mono text-xs font-semibold text-[#00A39D]">
+                            {String(order.orderCode || order.id || '').slice(-8)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <p className="text-sm text-white font-medium truncate max-w-[140px]">
+                            {String((order.user as Record<string, unknown>)?.name || order.userName || '—')}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground truncate max-w-[140px]">
+                            {String((order.user as Record<string, unknown>)?.email || order.userEmail || '')}
+                          </p>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] bg-[rgba(0,163,157,0.06)] border-[rgba(0,163,157,0.2)] text-[#7FB3AE]"
+                          >
+                            {String(order.ticketType || (order.items as Record<string, unknown>[])?.[0]?.ticketType || '—')}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-center">
+                          <span className="text-sm text-white font-semibold">{Number(order.quantity || (order.items as Record<string, unknown>[])?.length || 0)}</span>
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-right">
+                          <span className="text-sm text-white font-semibold">
+                            {formatRupiah(Number(order.totalAmount || 0))}
+                          </span>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <p className="text-xs text-muted-foreground">{String(order.paymentMethod || order.paymentType || '—')}</p>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">{getStatusBadge(String(order.status || ''))}</TableCell>
+                        <TableCell className="px-4 py-3">
+                          <p className="text-xs text-muted-foreground">
+                            {formatDateTime(String(order.createdAt || ''))}
+                          </p>
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-center">
+                          <OrderDetailDialog order={order} />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
 
           {/* ═══ PAGINATION ═══ */}
           {filteredOrders.length > PAGE_SIZE && (

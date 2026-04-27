@@ -23,7 +23,7 @@ import {
   autoAssignSeat,
   getZoneTypeLabel,
 } from '@/lib/seat-data'
-import { formatRupiah } from '@/lib/mock-data'
+import { formatRupiah } from '@/lib/utils'
 import { SeatMap } from '@/components/seat/SeatMap'
 import { AutoAssignModal } from '@/components/seat/AutoAssignModal'
 import {

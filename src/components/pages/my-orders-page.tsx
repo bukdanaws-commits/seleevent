@@ -23,7 +23,7 @@ import {
   XCircle,
   CheckCircle2,
 } from "lucide-react";
-import { formatRupiah } from "@/lib/mock-data";
+import { formatRupiah } from "@/lib/utils";
 import type { Order } from "@/lib/mock-data";
 import { useAuthStore } from "@/lib/auth-store";
 import { usePageStore } from "@/lib/page-store";

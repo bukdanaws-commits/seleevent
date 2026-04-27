@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import {
   ScanLine,
   Camera,
@@ -20,112 +20,67 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
-import {
-  mockStaffUsers,
-  mockCounters,
-  mockRedemptions,
-  wristbandConfigs,
-} from '@/lib/operational-mock-data'
-import { formatRupiah } from '@/lib/mock-data'
+import { formatRupiah } from '@/lib/utils'
+import { useCounterScan, useCounterStatus, useCounterRedemptions } from '@/hooks/use-api'
+import type { IRedeemTicketResponse } from '@/lib/types'
 
-// ============================================================
-// Types
-// ============================================================
-
-interface TicketResult {
+interface ScanResult {
   ticketCode: string
   attendeeName: string
   ticketType: string
-  emoji: string
-  seatLabel: string | null
-  price: number
   wristbandColor: string
   wristbandColorHex: string
   wristbandType: string
   wristbandCode: string
+  seatLabel: string | null
+  price: number
 }
-
-// ============================================================
-// Mock ticket lookup data
-// ============================================================
-
-const mockTicketLookup: Record<string, TicketResult> = (() => {
-  const names = [
-    'Budi Santoso',
-    'Sari Dewi',
-    'Ahmad Hidayat',
-    'Fitri Handayani',
-    'Rudi Hartono',
-    'Yuliana Putri',
-    'Dimas Arya',
-    'Ani Rahayu',
-  ]
-  const results: Record<string, TicketResult> = {}
-
-  names.forEach((name, i) => {
-    const wb = wristbandConfigs[i % wristbandConfigs.length]
-    const code = `SHL-JKT-${wb.ticketTypeName.replace(/\s/g, '').toUpperCase().slice(0, 6)}-${String(i + 1).padStart(4, '0')}`
-    const seatIdx = i < 4 ? i : null
-    const seatLabels: Record<string, string[]> = {
-      VVIPIP: ['V1', 'V2', 'V5', 'V8'],
-      VIPZONE: ['P1', 'P5', 'P10', 'P12'],
-      FESTIVA: null as unknown as string[],
-      CAT1: ['A1', 'A5', 'A10', 'A15'],
-      CAT2: ['B1', 'B10', 'C3', 'C12'],
-      CAT3: ['C1', 'C10', 'D5', 'D20'],
-      CAT4: ['D1', 'D15', 'E5', 'E25'],
-      CAT5: ['E1', 'E10', 'F5', 'F20'],
-    }
-    const key = wb.ticketTypeName.replace(/\s/g, '').toUpperCase().slice(0, 6)
-    const seats = seatLabels[key]
-    results[code] = {
-      ticketCode: code,
-      attendeeName: name,
-      ticketType: wb.ticketTypeName,
-      emoji: wb.emoji,
-      seatLabel: seats && seatIdx !== null ? seats[seatIdx % seats.length] : null,
-      price: [3500000, 2800000, 2200000, 1750000, 1400000, 1100000, 850000, 550000][i % 8],
-      wristbandColor: wb.wristbandColor,
-      wristbandColorHex: wb.wristbandColorHex,
-      wristbandType: wb.wristbandType,
-      wristbandCode: `WB-${String(i + 1).padStart(5, '0')}`,
-    }
-  })
-
-  return results
-})()
-
-// ============================================================
-// Component
-// ============================================================
 
 export function CounterScanner() {
   const [ticketCode, setTicketCode] = useState('')
-  const [result, setResult] = useState<TicketResult | null>(null)
-  const [scanning, setScanning] = useState(false)
+  const [result, setResult] = useState<ScanResult | null>(null)
   const [notFound, setNotFound] = useState(false)
 
-  const currentStaff = mockStaffUsers.find((s) => s.id === 'cs-001')!
-  const currentCounter = mockCounters.find((c) => c.id === 'ctr-001')!
-  const todayRedemptions = mockRedemptions.filter(
-    (r) =>
-      r.counterName === currentCounter.name &&
-      r.staffName === currentStaff.name
-  )
+  const scanMutation = useCounterScan()
+  const { data: statusData } = useCounterStatus()
+  const { data: redemptionsData } = useCounterRedemptions()
 
-  const handleLookup = () => {
+  // Extract counter info from status
+  const counterInfo = statusData?.counter as Record<string, unknown> | undefined
+  const statsInfo = statusData?.stats as Record<string, unknown> | undefined
+
+  const todayRedemptions = (redemptionsData as { data: unknown[] } | undefined)?.data?.length ?? 0
+  const counterName = (counterInfo?.name as string) ?? 'Counter'
+  const isActive = (counterInfo?.status as string) === 'active'
+
+  const handleLookup = async () => {
     if (!ticketCode.trim()) return
 
-    setScanning(true)
     setNotFound(false)
     setResult(null)
 
-    // Simulate scan delay
-    setTimeout(() => {
-      const found = mockTicketLookup[ticketCode.trim().toUpperCase()]
-      if (found) {
-        setResult(found)
+    try {
+      // First we scan (lookup) the ticket - use scanAndRedeem but we'll just look it up first
+      // Actually we need a check first, then redeem on confirm
+      // The counter scan endpoint does both check+redeem, so we use checkTicket first
+      const { publicApi } = await import('@/lib/api')
+      const checkResult = await publicApi.checkTicket(ticketCode.trim())
+
+      if (checkResult.found && checkResult.ticket) {
+        const t = checkResult.ticket
+        setResult({
+          ticketCode: t.ticketCode,
+          attendeeName: t.attendeeName,
+          ticketType: t.ticketTypeName,
+          wristbandColor: t.wristbandColor ?? '',
+          wristbandColorHex: '',
+          wristbandType: '',
+          wristbandCode: '',
+          seatLabel: t.seatLabel,
+          price: t.price,
+        })
         setNotFound(false)
       } else {
         setNotFound(true)
@@ -133,20 +88,40 @@ export function CounterScanner() {
           description: `Kode "${ticketCode}" tidak terdaftar dalam sistem.`,
         })
       }
-      setScanning(false)
-    }, 600)
+    } catch (err) {
+      setNotFound(true)
+      toast.error('Tiket tidak ditemukan', {
+        description: `Kode "${ticketCode}" tidak terdaftar dalam sistem.`,
+      })
+    }
   }
 
-  const handleRedeem = () => {
+  const handleRedeem = async () => {
     if (!result) return
 
-    toast.success('Gelang berhasil ditukar!', {
-      description: `${result.attendeeName} — ${result.wristbandCode} (${result.wristbandColor})`,
-    })
+    try {
+      // Generate a wristband code
+      const wbCode = `WB-${String(Math.floor(10000 + Math.random() * 90000)).padStart(5, '0')}`
+      const counterId = (counterInfo?.id as string) ?? ''
 
-    setResult(null)
-    setTicketCode('')
-    setNotFound(false)
+      const redeemResult = await scanMutation.mutateAsync({
+        ticketCode: result.ticketCode,
+        counterId,
+        wristbandCode: wbCode,
+      })
+
+      const resp = redeemResult as IRedeemTicketResponse
+      toast.success('Gelang berhasil ditukar!', {
+        description: `${resp.attendeeName} — ${wbCode} (${resp.wristbandColor})`,
+      })
+
+      setResult(null)
+      setTicketCode('')
+      setNotFound(false)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Gagal menukar gelang'
+      toast.error('Gagal menukar gelang', { description: message })
+    }
   }
 
   const handleReject = () => {
@@ -177,7 +152,7 @@ export function CounterScanner() {
               Dituksr Hari Ini
             </p>
             <p className="text-xl font-bold text-primary mt-1">
-              {todayRedemptions.length}
+              {todayRedemptions}
             </p>
           </CardContent>
         </Card>
@@ -186,7 +161,7 @@ export function CounterScanner() {
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
               Counter
             </p>
-            <p className="text-xl font-bold text-foreground mt-1">{currentCounter.name}</p>
+            <p className="text-xl font-bold text-foreground mt-1">{counterName}</p>
           </CardContent>
         </Card>
         <Card className="bg-[#111918] border-border/30">
@@ -194,8 +169,8 @@ export function CounterScanner() {
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
               Status
             </p>
-            <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px] mt-1.5 hover:bg-emerald-500/20">
-              ● Aktif
+            <Badge className={cn('text-[10px] mt-1.5', isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-500/20 text-gray-400')}>
+              {isActive ? '● Aktif' : 'Nonaktif'}
             </Badge>
           </CardContent>
         </Card>
@@ -222,7 +197,7 @@ export function CounterScanner() {
             <div className="flex flex-col items-center gap-2 text-primary/50">
               <ScanLine className="h-8 w-8 animate-pulse" />
               <p className="text-xs font-medium">
-                {scanning ? 'Memindai...' : 'Arahkan QR ke area ini'}
+                {scanMutation.isPending ? 'Memindai...' : 'Arahkan QR ke area ini'}
               </p>
               <p className="text-[10px] text-muted-foreground">
                 Scanner kamera dalam mode demo
@@ -230,7 +205,7 @@ export function CounterScanner() {
             </div>
 
             {/* Scan line animation */}
-            {scanning && (
+            {scanMutation.isPending && (
               <div className="absolute inset-x-4 top-0 h-0.5 bg-primary animate-[scanLine_1.5s_ease-in-out_infinite]" />
             )}
           </div>
@@ -250,23 +225,20 @@ export function CounterScanner() {
                 onKeyDown={handleKeyDown}
                 placeholder="Contoh: SHL-JKT-VVIPIP-0001"
                 className="font-mono text-sm bg-[#0A0F0E] border-border/50 focus:border-primary"
-                disabled={scanning}
+                disabled={scanMutation.isPending}
               />
               <Button
                 onClick={handleLookup}
-                disabled={!ticketCode.trim() || scanning}
+                disabled={!ticketCode.trim() || scanMutation.isPending}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground shrink-0"
               >
-                {scanning ? (
+                {scanMutation.isPending ? (
                   <RotateCcw className="h-4 w-4 animate-spin" />
                 ) : (
                   <ArrowRight className="h-4 w-4" />
                 )}
               </Button>
             </div>
-            <p className="text-[10px] text-muted-foreground">
-              Coba: SHL-JKT-VVIPIP-0001, SHL-JKT-VIPZONE-0002, SHL-JKT-FESTIVA-0003
-            </p>
           </div>
         </CardContent>
       </Card>
@@ -293,9 +265,7 @@ export function CounterScanner() {
             <div className="space-y-3">
               <div className="flex items-start gap-3">
                 <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                  <span className="text-lg">
-                    {result.emoji}
-                  </span>
+                  <Ticket className="h-5 w-5 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-foreground text-sm">
@@ -316,7 +286,7 @@ export function CounterScanner() {
                   <div>
                     <p className="text-[10px] text-muted-foreground">Tipe Tiket</p>
                     <p className="text-xs font-medium text-foreground">
-                      {result.emoji} {result.ticketType}
+                      {result.ticketType}
                     </p>
                   </div>
                 </div>
@@ -345,38 +315,45 @@ export function CounterScanner() {
                   <div>
                     <p className="text-[10px] text-muted-foreground">Kode Gelang</p>
                     <p className="text-xs font-medium text-foreground font-mono">
-                      {result.wristbandCode}
+                      {result.wristbandCode || 'Akan digenerate'}
                     </p>
                   </div>
                 </div>
               </div>
 
-              <Separator className="bg-border/30" />
-
-              {/* Wristband Info */}
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-[#0A0F0E]/80 border border-border/30">
-                <div
-                  className="h-8 w-8 rounded-full shrink-0 border-2 border-white/20"
-                  style={{ backgroundColor: result.wristbandColorHex }}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-foreground">
-                    Gelang {result.wristbandColor}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground truncate">
-                    {result.wristbandType}
-                  </p>
-                </div>
-              </div>
+              {result.wristbandColor && (
+                <>
+                  <Separator className="bg-border/30" />
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-[#0A0F0E]/80 border border-border/30">
+                    <div
+                      className="h-8 w-8 rounded-full shrink-0 border-2 border-white/20"
+                      style={{ backgroundColor: result.wristbandColorHex || '#E5E7EB' }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-foreground">
+                        Gelang {result.wristbandColor}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground truncate">
+                        {result.wristbandType}
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Action Buttons */}
             <div className="flex gap-2">
               <Button
                 onClick={handleRedeem}
+                disabled={scanMutation.isPending}
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold h-11"
               >
-                <CheckCircle2 className="h-4 w-4 mr-2" />
+                {scanMutation.isPending ? (
+                  <RotateCcw className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                )}
                 TUKAR & PASANG GELANG
               </Button>
               <Button

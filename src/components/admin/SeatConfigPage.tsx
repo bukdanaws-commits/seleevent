@@ -47,13 +47,16 @@ import {
   getSelectionModeLabel,
   getComputedTotal,
 } from '@/lib/seat-data'
-import { formatRupiah } from '@/lib/mock-data'
+import { formatRupiah } from '@/lib/utils'
 import { SeatMap } from '@/components/seat/SeatMap'
+import { useAdminSeats } from '@/hooks/use-api'
+import { Skeleton } from '@/components/ui/skeleton'
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function SeatConfigPage() {
-  const [configs, setConfigs] = useState<SeatConfig[]>(defaultSeatConfigs)
+  const { data: seatsData, isLoading, error } = useAdminSeats();
+  const [configs, setConfigs] = useState<SeatConfig[]>((seatsData as any) ?? defaultSeatConfigs)
   const [selectedTier, setSelectedTier] = useState<string>(configs[0].tierId)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false)
@@ -68,6 +71,9 @@ export function SeatConfigPage() {
   }, [currentConfig])
 
   const stats = useMemo(() => getSeatStats(mockSeats), [mockSeats])
+
+  if (isLoading) return <div className="p-6 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-40 w-full" /></div>
+  if (error) return <div className="p-6 text-red-500">Failed to load data: {error.message}</div>
 
   // ─── Edit Handlers ───────────────────────────────────────────────────────
 

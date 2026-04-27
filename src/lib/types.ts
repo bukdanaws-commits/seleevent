@@ -19,7 +19,7 @@ export type EventStatus = 'draft' | 'published' | 'sold_out' | 'completed'
 
 export type OrderStatus = 'pending' | 'paid' | 'rejected' | 'cancelled' | 'expired'
 
-export type TicketStatus = 'active' | 'redeemed' | 'inside' | 'outside' | 'cancelled'
+export type TicketStatus = 'pending' | 'active' | 'redeemed' | 'inside' | 'outside' | 'cancelled' | 'expired'
 
 export type TicketTier = 'floor' | 'tribun'
 
@@ -107,10 +107,17 @@ export interface IOrder {
   totalAmount: number
   status: OrderStatus
   paymentMethod?: string
+  paymentType?: string
+  midtransTransactionId?: string
   expiresAt?: string
   paidAt?: string
   createdAt: string
   updatedAt: string
+  // Populated by backend with preloaded relations
+  items?: IOrderItem[]
+  tickets?: ITicket[]
+  event?: IEvent
+  user?: IUser
 }
 
 export interface IOrderItem {
@@ -120,6 +127,8 @@ export interface IOrderItem {
   quantity: number
   pricePerTicket: number
   subtotal: number
+  // Populated by backend
+  ticketType?: ITicketType
 }
 
 export interface ITicket {
@@ -137,6 +146,10 @@ export interface ITicket {
   wristbandCode?: string
   createdAt: string
   updatedAt: string
+  // Populated by backend
+  ticketType?: ITicketType
+  order?: IOrder
+  event?: IEvent
 }
 
 export interface ICounter {
@@ -159,6 +172,9 @@ export interface ICounterStaff {
   shift?: ShiftType
   status: string
   assignedAt: string
+  // Populated by backend
+  user?: IUser
+  counter?: ICounter
 }
 
 export interface IGate {
@@ -181,6 +197,9 @@ export interface IGateStaff {
   shift?: ShiftType
   status: string
   assignedAt: string
+  // Populated by backend
+  user?: IUser
+  gate?: IGate
 }
 
 export interface IRedemption {
@@ -232,7 +251,7 @@ export interface IWristbandInventory {
 
 export interface INotification {
   id: string
-  userId?: string
+  userId: string
   eventId?: string
   title: string
   message: string
@@ -265,6 +284,76 @@ export interface ITenantUser {
   role: UserRole
   isActive: boolean
   joinedAt: string
+}
+
+// ─── ORDER CREATION ────────────────────────────────────────────────────────
+
+export interface ICreateOrderRequest {
+  eventId: string
+  items: ICreateOrderItem[]
+}
+
+export interface ICreateOrderItem {
+  ticketTypeId: string
+  quantity: number
+  attendeeName: string
+  attendeeEmail: string
+}
+
+// ─── PAYMENT ───────────────────────────────────────────────────────────────
+
+export interface ICreatePaymentRequest {
+  orderId: string
+  paymentType: 'qris' | 'bank_transfer' | 'gopay'
+}
+
+export interface ICreatePaymentResponse {
+  token: string
+  redirectUrl?: string
+  qrUrl?: string
+  vaNumber?: string
+  paymentType: string
+}
+
+export interface IPaymentStatus {
+  orderId: string
+  orderStatus: string
+  paymentType?: string
+  paidAt?: string
+  midtransTransactionId?: string
+}
+
+// ─── PAGINATION ────────────────────────────────────────────────────────────
+
+export interface IPagination {
+  total: number
+  page: number
+  perPage: number
+  totalPages: number
+}
+
+export interface IPaginatedResponse<T> {
+  data: T[]
+  pagination: IPagination
+}
+
+// ─── SSE EVENTS ────────────────────────────────────────────────────────────
+
+export interface ISSEEvent {
+  type: 'redemption' | 'gate_scan' | 'ticket_cancelled' | 'stats_update' | 'connected'
+  data: unknown
+  id: string
+  timestamp: string
+}
+
+// ─── SYSTEM HEALTH ─────────────────────────────────────────────────────────
+
+export interface ISystemHealth {
+  dbStatus: string
+  activeConnections: number
+  sseConnections: number
+  tableCounts: Record<string, number>
+  uptime: number
 }
 
 // ─── API REQUEST / RESPONSE DTOs ──────────────────────────────────────────
@@ -365,9 +454,9 @@ export interface ILiveStats {
   totalRevenue: number
 }
 
-// WebSocket Messages
+// WebSocket Messages (legacy, kept for backward compat during transition)
 export interface IWSMessage {
-  type: 'redemption' | 'gate_scan' | 'stats_update' | 'notification' | 'counter_status' | 'gate_status'
+  type: 'redemption' | 'gate_scan' | 'stats_update' | 'notification' | 'counter_status' | 'gate_status' | 'ticket_cancelled'
   data: unknown
   timestamp: string
 }

@@ -1,7 +1,7 @@
 // ─── SELEEVENT API CLIENT ──────────────────────────────────────────────────
 // Centralized API endpoint constants + fetch client
 // Backend: Golang Fiber v2 (Port 8080)
-// All requests go through Next.js API routes as proxy (for production)
+// All requests go through Caddy gateway via XTransformPort
 // Dev mode: Direct to Golang backend via XTransformPort
 
 import type {
@@ -13,6 +13,11 @@ import type {
   IGateScanResponse,
   ILiveStats,
   IDashboardKPIs,
+  ICreateOrderRequest,
+  ICreatePaymentRequest,
+  ICreatePaymentResponse,
+  IPaymentStatus,
+  IPagination,
 } from './types'
 
 // ─── CONFIG ─────────────────────────────────────────────────────────────────
@@ -32,7 +37,7 @@ function getBaseUrl(): string {
   return API_BASE
 }
 
-// ─── API ENDPOINTS (matching Golang Fiber routes) ──────────────────────────
+// ─── API ENDPOINTS (matching Golang Fiber routes.go) ──────────────────────
 
 export const API = {
   // Auth
@@ -50,11 +55,25 @@ export const API = {
     TICKET_TYPES:   (eventId: string) => `/api/v1/events/${eventId}/ticket-types`,
   },
 
+  // Orders
+  ORDERS: {
+    CREATE:         '/api/v1/orders',
+    LIST:           '/api/v1/orders',
+    DETAIL:         (orderId: string) => `/api/v1/orders/${orderId}`,
+    CANCEL:         (orderId: string) => `/api/v1/orders/${orderId}/cancel`,
+  },
+
+  // Payment
+  PAYMENT: {
+    CREATE:         '/api/v1/payment/create',
+    CALLBACK:       '/api/v1/payment/callback',
+    STATUS:         (orderId: string) => `/api/v1/payment/status/${orderId}`,
+  },
+
   // Organizer (SUPER_ADMIN | ADMIN | ORGANIZER)
   ORGANIZER: {
     DASHBOARD_STATS:   '/api/v1/organizer/dashboard/stats',
     TICKETS:           '/api/v1/organizer/tickets',
-    GENERATE_TICKETS:  '/api/v1/organizer/tickets/generate',
     REDEMPTIONS:       '/api/v1/organizer/redemptions',
     LIVE_MONITOR:      '/api/v1/organizer/live-monitor',
     COUNTERS:          '/api/v1/organizer/counters',
@@ -71,7 +90,6 @@ export const API = {
     STATUS:          '/api/v1/counter/status',
     INVENTORY:       '/api/v1/counter/inventory',
     GUIDE:           '/api/v1/counter/guide',
-    HELP:            '/api/v1/counter/help',
   },
 
   // Gate (GATE_STAFF)
@@ -99,13 +117,8 @@ export const API = {
     SETTINGS:       '/api/v1/admin/settings',
     CREW_GATES:     '/api/v1/admin/crew-gates',
     LIVE_MONITOR:   '/api/v1/admin/live-monitor',
-  },
-
-  // Payment
-  PAYMENT: {
-    CREATE:         '/api/v1/payment/create',
-    CALLBACK:       '/api/v1/payment/callback',
-    STATUS:         (orderId: string) => `/api/v1/payment/status/${orderId}`,
+    CANCEL_TICKET:  (ticketId: string) => `/api/v1/admin/tickets/${ticketId}/cancel`,
+    EXPIRE_PENDING: '/api/v1/admin/tickets/expire-pending',
   },
 
   // Notifications
@@ -115,9 +128,9 @@ export const API = {
     MARK_ALL_READ:  '/api/v1/notifications/read-all',
   },
 
-  // WebSocket
-  WS: {
-    LIVE:           '/ws/live',
+  // SSE
+  SSE: {
+    STREAM:        '/api/v1/events/stream',
   },
 } as const
 
@@ -145,14 +158,14 @@ export function clearTokens(): void {
   localStorage.removeItem('sele_refresh_token')
 }
 
-// ─── GENERIC FETCH WRAPPER ─────────────────────────────────────────────────
+// ─── GENERIC FETCH WRAPPER WITH ENVELOPE UNWRAPPING ──────────────────────────
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string>
   timeout?: number
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   status: number
   data: unknown
 
@@ -162,6 +175,12 @@ class ApiError extends Error {
     this.status = status
     this.data = data
   }
+}
+
+// Paginated data type for hooks
+export interface PaginatedData<T> {
+  data: T[]
+  pagination: IPagination
 }
 
 export async function apiFetch<T>(
@@ -200,17 +219,41 @@ export async function apiFetch<T>(
       signal: controller.signal,
     })
 
-    const data = await response.json()
+    const json = await response.json()
 
+    // ─── UNWRAP BACKEND RESPONSE ENVELOPE ─────────────────────────────────
+    // Backend returns: { success: true, data: {...}, meta/pagination: {...} }
+    //                  { success: false, error: "..." }
+    if (typeof json.success === 'boolean') {
+      if (!json.success) {
+        throw new ApiError(
+          response.status,
+          json.error || json.message || `Request failed`,
+          json
+        )
+      }
+      // Success response — unwrap data
+      if (json.pagination || json.meta) {
+        // Paginated response — return { data, pagination }
+        return {
+          data: json.data,
+          pagination: json.pagination || json.meta,
+        } as T
+      }
+      // Non-paginated — just return the data
+      return json.data as T
+    }
+
+    // Fallback: no envelope, return raw JSON
     if (!response.ok) {
       throw new ApiError(
         response.status,
-        data.message || data.error || `HTTP ${response.status}`,
-        data
+        json.message || json.error || `HTTP ${response.status}`,
+        json
       )
     }
 
-    return data as T
+    return json as T
   } catch (error) {
     if (error instanceof ApiError) throw error
     if (error instanceof DOMException && error.name === 'AbortError') {
@@ -227,13 +270,13 @@ export async function apiFetch<T>(
 // Auth
 export const authApi = {
   googleLogin: (token: string) =>
-    apiFetch<{ user: unknown; accessToken: string; refreshToken: string }>(
+    apiFetch<{ user: unknown; accessToken: string; refreshToken: string; expiresIn: number }>(
       API.AUTH.GOOGLE_LOGIN,
       { method: 'POST', body: JSON.stringify({ token }) }
     ),
 
   refreshToken: (refreshToken: string) =>
-    apiFetch<{ accessToken: string; refreshToken: string }>(
+    apiFetch<{ accessToken: string; refreshToken: string; expiresIn: number }>(
       API.AUTH.REFRESH_TOKEN,
       { method: 'POST', body: JSON.stringify({ refreshToken }) }
     ),
@@ -245,8 +288,14 @@ export const authApi = {
     apiFetch<void>(API.AUTH.LOGOUT, { method: 'POST' }),
 }
 
-// Tickets
-export const ticketApi = {
+// Public
+export const publicApi = {
+  getEventBySlug: (slug: string) =>
+    apiFetch<{ event: unknown }>(API.PUBLIC.EVENT_DETAIL(slug)),
+
+  getTicketTypes: (eventId: string) =>
+    apiFetch<unknown[]>(API.PUBLIC.TICKET_TYPES(eventId)),
+
   checkTicket: (ticketCode: string) =>
     apiFetch<ICheckTicketResponse>(
       API.PUBLIC.CHECK_TICKET,
@@ -254,21 +303,61 @@ export const ticketApi = {
     ),
 }
 
+// Orders
+export const orderApi = {
+  createOrder: (data: ICreateOrderRequest) =>
+    apiFetch<unknown>(API.ORDERS.CREATE, { method: 'POST', body: JSON.stringify(data) }),
+
+  getUserOrders: (params?: Record<string, string>) =>
+    apiFetch<PaginatedData<unknown>>(API.ORDERS.LIST, { params }),
+
+  getOrderDetail: (orderId: string) =>
+    apiFetch<unknown>(API.ORDERS.DETAIL(orderId)),
+
+  cancelOrder: (orderId: string) =>
+    apiFetch<void>(API.ORDERS.CANCEL(orderId), { method: 'POST' }),
+}
+
+// Payment
+export const paymentApi = {
+  createPayment: (data: ICreatePaymentRequest) =>
+    apiFetch<ICreatePaymentResponse>(API.PAYMENT.CREATE, { method: 'POST', body: JSON.stringify(data) }),
+
+  getPaymentStatus: (orderId: string) =>
+    apiFetch<IPaymentStatus>(API.PAYMENT.STATUS(orderId)),
+}
+
 // Organizer
 export const organizerApi = {
-  getDashboardStats: () =>
+  getDashboardStats: (eventId: string) =>
     apiFetch<{ kpis: IDashboardKPIs; liveStats: ILiveStats }>(
-      API.ORGANIZER.DASHBOARD_STATS
+      API.ORGANIZER.DASHBOARD_STATS,
+      { params: { eventId } }
     ),
+
+  getLiveMonitor: (eventId: string) =>
+    apiFetch<ILiveStats>(API.ORGANIZER.LIVE_MONITOR, { params: { eventId } }),
 
   getRedemptions: (params?: Record<string, string>) =>
-    apiFetch<{ data: unknown[]; total: number }>(
-      API.ORGANIZER.REDEMPTIONS,
-      { params }
-    ),
+    apiFetch<PaginatedData<unknown>>(API.ORGANIZER.REDEMPTIONS, { params }),
 
-  getLiveMonitor: () =>
-    apiFetch<ILiveStats>(API.ORGANIZER.LIVE_MONITOR),
+  getCounters: (params?: Record<string, string>) =>
+    apiFetch<unknown[]>(API.ORGANIZER.COUNTERS, { params }),
+
+  getGates: (params?: Record<string, string>) =>
+    apiFetch<unknown[]>(API.ORGANIZER.GATES, { params }),
+
+  getTickets: (params?: Record<string, string>) =>
+    apiFetch<PaginatedData<unknown>>(API.ORGANIZER.TICKETS, { params }),
+
+  getStaff: (params?: Record<string, string>) =>
+    apiFetch<unknown[]>(API.ORGANIZER.STAFF, { params }),
+
+  getWristbandInventory: (params?: Record<string, string>) =>
+    apiFetch<{ inventory: unknown[] }>(API.ORGANIZER.WRISTBAND_INVENTORY, { params }),
+
+  getWristbandGuide: () =>
+    apiFetch<{ guide: unknown[] }>(API.ORGANIZER.WRISTBAND_GUIDE),
 }
 
 // Counter
@@ -279,17 +368,17 @@ export const counterApi = {
       { method: 'POST', body: JSON.stringify(data) }
     ),
 
-  getMyRedemptions: (params?: Record<string, string>) =>
-    apiFetch<{ data: unknown[]; total: number }>(
-      API.COUNTER.MY_REDEMPTIONS,
-      { params }
-    ),
+  getRedemptions: (params?: Record<string, string>) =>
+    apiFetch<PaginatedData<unknown>>(API.COUNTER.MY_REDEMPTIONS, { params }),
 
   getStatus: () =>
     apiFetch<{ counter: unknown; stats: unknown }>(API.COUNTER.STATUS),
 
   getInventory: () =>
     apiFetch<{ inventory: unknown[] }>(API.COUNTER.INVENTORY),
+
+  getGuide: () =>
+    apiFetch<{ guide: unknown[] }>(API.COUNTER.GUIDE),
 }
 
 // Gate
@@ -301,19 +390,81 @@ export const gateApi = {
     ),
 
   getLogs: (params?: Record<string, string>) =>
-    apiFetch<{ data: unknown[]; total: number }>(
-      API.GATE.LOGS,
-      { params }
-    ),
+    apiFetch<PaginatedData<unknown>>(API.GATE.LOGS, { params }),
 
   getStatus: () =>
     apiFetch<{ gate: unknown; stats: unknown }>(API.GATE.STATUS),
 
   getProfile: () =>
-    apiFetch<{ staff: unknown; gate: unknown }>(API.GATE.PROFILE),
+    apiFetch<{ staff: unknown; gate: unknown; assignment: unknown; todayScans: number }>(API.GATE.PROFILE),
+}
+
+// Admin
+export const adminApi = {
+  getDashboard: () =>
+    apiFetch<unknown>(API.ADMIN.DASHBOARD),
+
+  getOrders: (params?: Record<string, string>) =>
+    apiFetch<PaginatedData<unknown>>(API.ADMIN.ORDERS, { params }),
+
+  getUsers: (params?: Record<string, string>) =>
+    apiFetch<PaginatedData<unknown>>(API.ADMIN.USERS, { params }),
+
+  getEvents: (params?: Record<string, string>) =>
+    apiFetch<unknown[]>(API.ADMIN.EVENTS, { params }),
+
+  getAnalytics: (eventId?: string) =>
+    apiFetch<unknown>(API.ADMIN.ANALYTICS, { params: eventId ? { eventId } : undefined }),
+
+  getTickets: (params?: Record<string, string>) =>
+    apiFetch<PaginatedData<unknown>>(API.ADMIN.TICKETS, { params }),
+
+  getStaff: (params?: Record<string, string>) =>
+    apiFetch<PaginatedData<unknown>>(API.ADMIN.STAFF, { params }),
+
+  getCounters: (params?: Record<string, string>) =>
+    apiFetch<PaginatedData<unknown>>(API.ADMIN.COUNTERS, { params }),
+
+  getGates: (params?: Record<string, string>) =>
+    apiFetch<PaginatedData<unknown>>(API.ADMIN.GATE_MANAGE, { params }),
+
+  getGateMonitoring: (eventId?: string) =>
+    apiFetch<unknown>(API.ADMIN.GATE_MONITOR, { params: eventId ? { eventId } : undefined }),
+
+  getVerifications: (params?: Record<string, string>) =>
+    apiFetch<PaginatedData<unknown>>(API.ADMIN.VERIFICATIONS, { params }),
+
+  getSeats: (eventId?: string) =>
+    apiFetch<unknown>(API.ADMIN.SEATS, { params: eventId ? { eventId } : undefined }),
+
+  getSettings: () =>
+    apiFetch<unknown>(API.ADMIN.SETTINGS),
+
+  getCrewGates: (params?: Record<string, string>) =>
+    apiFetch<PaginatedData<unknown>>(API.ADMIN.CREW_GATES, { params }),
+
+  getLiveMonitor: (eventId?: string) =>
+    apiFetch<unknown>(API.ADMIN.LIVE_MONITOR, { params: eventId ? { eventId } : undefined }),
+
+  cancelTicket: (ticketId: string) =>
+    apiFetch<void>(API.ADMIN.CANCEL_TICKET(ticketId), { method: 'PATCH' }),
+
+  expirePendingTickets: () =>
+    apiFetch<{ count: number }>(API.ADMIN.EXPIRE_PENDING, { method: 'POST' }),
+}
+
+// Notifications
+export const notificationApi = {
+  getNotifications: (params?: Record<string, string>) =>
+    apiFetch<PaginatedData<unknown>>(API.NOTIFICATIONS.LIST, { params }),
+
+  markAsRead: (id: string) =>
+    apiFetch<void>(API.NOTIFICATIONS.MARK_READ(id), { method: 'PATCH' }),
+
+  markAllAsRead: () =>
+    apiFetch<void>(API.NOTIFICATIONS.MARK_ALL_READ, { method: 'POST' }),
 }
 
 // ─── DEFAULT EXPORT ────────────────────────────────────────────────────────
 
-export { ApiError }
 export default apiFetch

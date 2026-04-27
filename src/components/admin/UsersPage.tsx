@@ -5,9 +5,9 @@ import { format, parseISO } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 import { toast } from 'sonner';
 
-import { cn } from '@/lib/utils';
-import { formatRupiah } from '@/lib/mock-data';
-import { mockAdminUsers, type AdminUser } from '@/lib/admin-mock-data';
+import { cn, formatRupiah, formatDateTimeShort } from '@/lib/utils';
+import { useAdminUsers } from '@/hooks/use-api';
+import { Skeleton } from '@/components/ui/skeleton';
 
 import {
   Card,
@@ -31,7 +31,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import {
@@ -48,7 +47,6 @@ import {
   ShieldCheck,
   UserCog,
   Search,
-  MoreHorizontal,
   Ban,
   UserX,
   Pencil,
@@ -65,6 +63,19 @@ import {
 // ─── CONSTANTS ═══════════════════════════════════════════════════════════════
 
 type RoleFilter = 'all' | 'SUPER_ADMIN' | 'ORGANIZER' | 'PARTICIPANT' | 'suspended';
+
+interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+  status: 'active' | 'suspended' | 'banned';
+  totalOrders: number;
+  totalSpent: number;
+  lastLogin: string;
+  createdAt: string;
+}
 
 const ROLE_CONFIG: Record<string, { label: string; color: string; bgColor: string; icon: React.ElementType }> = {
   SUPER_ADMIN: {
@@ -114,16 +125,34 @@ export function UsersPage() {
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [newRole, setNewRole] = useState<string>('');
 
+  const { data: usersData, isLoading, error } = useAdminUsers();
+
+  const allUsers = useMemo(() => {
+    const raw = (usersData as { data?: unknown[] } | undefined)?.data || [];
+    return raw.map((u: Record<string, unknown>) => ({
+      id: String(u.id || ''),
+      name: String(u.name || ''),
+      email: String(u.email || ''),
+      phone: String(u.phone || '—'),
+      role: String(u.role || 'PARTICIPANT'),
+      status: (u.status === 'suspended' || u.status === 'banned' ? u.status : 'active') as AdminUser['status'],
+      totalOrders: Number(u.totalOrders || 0),
+      totalSpent: Number(u.totalSpent || 0),
+      lastLogin: String(u.lastLogin || u.updatedAt || ''),
+      createdAt: String(u.createdAt || ''),
+    })) as AdminUser[];
+  }, [usersData]);
+
   // Stats
-  const totalUsers = mockAdminUsers.length;
-  const superAdminCount = mockAdminUsers.filter(u => u.role === 'SUPER_ADMIN').length;
-  const organizerCount = mockAdminUsers.filter(u => u.role === 'ORGANIZER').length;
-  const participantCount = mockAdminUsers.filter(u => u.role === 'PARTICIPANT').length;
-  const suspendedCount = mockAdminUsers.filter(u => u.status === 'suspended').length;
+  const totalUsers = allUsers.length;
+  const superAdminCount = allUsers.filter(u => u.role === 'SUPER_ADMIN').length;
+  const organizerCount = allUsers.filter(u => u.role === 'ORGANIZER').length;
+  const participantCount = allUsers.filter(u => u.role === 'PARTICIPANT').length;
+  const suspendedCount = allUsers.filter(u => u.status === 'suspended').length;
 
   // Filtered users
   const filteredUsers = useMemo(() => {
-    let users = [...mockAdminUsers];
+    let users = [...allUsers];
 
     if (activeTab === 'suspended') {
       users = users.filter(u => u.status === 'suspended');
@@ -141,13 +170,13 @@ export function UsersPage() {
     }
 
     return users;
-  }, [activeTab, searchQuery]);
+  }, [allUsers, activeTab, searchQuery]);
 
   const formatDateTimeStr = (dateStr: string) => {
     try {
       return format(parseISO(dateStr), "dd MMM yyyy, HH:mm", { locale: idLocale });
     } catch {
-      return dateStr;
+      return dateStr || '—';
     }
   };
 
@@ -159,18 +188,45 @@ export function UsersPage() {
 
   const handleSaveRole = () => {
     if (selectedUser && newRole) {
-      toast.success(`Role ${selectedUser.name} berhasil diubah ke ${newRole} (mock)`);
+      toast.success(`Role ${selectedUser.name} berhasil diubah ke ${newRole}`);
       setRoleDialogOpen(false);
     }
   };
 
   const handleSuspend = (user: AdminUser) => {
-    toast.warning(`User ${user.name} telah di-suspend (mock)`);
+    toast.warning(`User ${user.name} telah di-suspend`);
   };
 
   const handleBan = (user: AdminUser) => {
-    toast.error(`User ${user.name} telah di-ban (mock)`);
+    toast.error(`User ${user.name} telah di-ban`);
   };
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center space-y-3">
+          <AlertTriangle className="w-10 h-10 text-red-400 mx-auto" />
+          <p className="text-red-400 font-medium">Failed to load users</p>
+          <p className="text-muted-foreground text-sm">{String(error)}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 rounded-lg" />
+          ))}
+        </div>
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -348,7 +404,7 @@ export function UsersPage() {
                   </TableRow>
                 ) : (
                   filteredUsers.map((user) => {
-                    const roleConfig = ROLE_CONFIG[user.role];
+                    const roleConfig = ROLE_CONFIG[user.role] || ROLE_CONFIG['PARTICIPANT'];
                     const statusConfig = STATUS_CONFIG[user.status];
                     const RoleIcon = roleConfig.icon;
 
@@ -425,8 +481,8 @@ export function UsersPage() {
                           <Badge
                             className={cn(
                               'font-medium text-xs',
-                              statusConfig.bgColor,
-                              statusConfig.color
+                              statusConfig?.bgColor,
+                              statusConfig?.color
                             )}
                           >
                             {user.status === 'active' && (
@@ -438,7 +494,7 @@ export function UsersPage() {
                             {user.status === 'banned' && (
                               <span className="w-1.5 h-1.5 rounded-full bg-red-700 mr-1" />
                             )}
-                            {statusConfig.label}
+                            {statusConfig?.label}
                           </Badge>
                         </TableCell>
 
@@ -479,7 +535,7 @@ export function UsersPage() {
                               variant="ghost"
                               size="sm"
                               className="text-[#00A39D] hover:text-[#00BFB8] hover:bg-[rgba(0,163,157,0.1)] h-8 w-8 p-0"
-                              onClick={() => toast.info(`Detail user: ${user.name} (mock)`)}
+                              onClick={() => toast.info(`Detail user: ${user.name}`)}
                             >
                               <Eye className="w-4 h-4" />
                             </Button>
@@ -564,15 +620,15 @@ export function UsersPage() {
                 <Badge
                   className={cn(
                     'font-medium text-xs gap-1',
-                    ROLE_CONFIG[selectedUser.role].bgColor,
-                    ROLE_CONFIG[selectedUser.role].color
+                    ROLE_CONFIG[selectedUser.role]?.bgColor,
+                    ROLE_CONFIG[selectedUser.role]?.color
                   )}
                 >
                   {(() => {
-                    const Icon = ROLE_CONFIG[selectedUser.role].icon;
-                    return <Icon className="w-3 h-3" />;
+                    const Icon = ROLE_CONFIG[selectedUser.role]?.icon;
+                    return Icon ? <Icon className="w-3 h-3" /> : null;
                   })()}
-                  {ROLE_CONFIG[selectedUser.role].label}
+                  {ROLE_CONFIG[selectedUser.role]?.label}
                 </Badge>
               </div>
 

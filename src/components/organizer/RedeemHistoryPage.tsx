@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Select,
   SelectContent,
@@ -29,11 +30,10 @@ import {
   ChevronRight,
   Filter,
 } from 'lucide-react'
-import { mockTickets } from '@/lib/admin-mock-data'
-import type { TicketRecord } from '@/lib/admin-mock-data'
-import { formatDateTimeShort } from '@/lib/operational-mock-data'
+import { useOrganizerRedemptions } from '@/hooks/use-api'
+import { formatDateTimeShort } from '@/lib/utils'
 
-function getStatusBadge(status: TicketRecord['status']) {
+function getStatusBadge(status: string) {
   switch (status) {
     case 'active':
       return <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20">Aktif</Badge>
@@ -55,24 +55,32 @@ export function RedeemHistoryPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [currentPage, setCurrentPage] = useState(1)
 
-  // Base data: tickets that have been redeemed or are inside venue
+  const { data: redemptionsData, isLoading } = useOrganizerRedemptions('sheila-on-7-melompat-lebih-tinggi')
+
+  // Extract redemptions from paginated response
+  const redemptions = useMemo(() => {
+    const data = redemptionsData as { data: unknown[] } | undefined
+    return (data?.data ?? []) as Record<string, unknown>[]
+  }, [redemptionsData])
+
+  // Filter to only redeemed/inside
   const historyData = useMemo(() => {
-    return mockTickets.filter(
-      (t) => t.status === 'redeemed' || t.status === 'inside'
+    return redemptions.filter(
+      (t) => String(t.status) === 'redeemed' || String(t.status) === 'inside'
     )
-  }, [])
+  }, [redemptions])
 
   // Unique ticket type names
   const ticketTypes = useMemo(() => {
-    const types = new Set(historyData.map((t) => t.ticketType))
-    return Array.from(types).sort()
+    const types = new Set(historyData.map((t) => String(t.ticketType ?? t.ticketTypeName ?? '')))
+    return Array.from(types).filter(Boolean).sort()
   }, [historyData])
 
   // Filtered data
   const filteredData = useMemo(() => {
     return historyData.filter((t) => {
-      const matchesType = ticketTypeFilter === 'all' || t.ticketType === ticketTypeFilter
-      const matchesStatus = statusFilter === 'all' || t.status === statusFilter
+      const matchesType = ticketTypeFilter === 'all' || String(t.ticketType ?? t.ticketTypeName) === ticketTypeFilter
+      const matchesStatus = statusFilter === 'all' || String(t.status) === statusFilter
       return matchesType && matchesStatus
     })
   }, [historyData, ticketTypeFilter, statusFilter])
@@ -98,6 +106,16 @@ export function RedeemHistoryPage() {
   const handleStatusChange = (value: string) => {
     setStatusFilter(value)
     setCurrentPage(1)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-72" />
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    )
   }
 
   return (
@@ -177,35 +195,35 @@ export function RedeemHistoryPage() {
                   </TableRow>
                 ) : (
                   paginatedData.map((ticket, index) => (
-                    <TableRow key={ticket.id} className="border-white/5 hover:bg-white/[0.02]">
+                    <TableRow key={String(ticket.id ?? index)} className="border-white/5 hover:bg-white/[0.02]">
                       <TableCell className="text-center text-[#7FB3AE] text-sm">
                         {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
                       </TableCell>
                       <TableCell>
                         <span className="font-mono text-sm font-medium text-white">
-                          {ticket.ticketCode}
+                          {String(ticket.ticketCode ?? '-')}
                         </span>
                       </TableCell>
                       <TableCell className="hidden md:table-cell text-sm text-white">
-                        {ticket.userName}
+                        {String(ticket.userName ?? ticket.attendeeName ?? '-')}
                       </TableCell>
                       <TableCell className="hidden sm:table-cell text-sm text-[#7FB3AE]">
-                        {ticket.ticketType}
+                        {String(ticket.ticketType ?? ticket.ticketTypeName ?? '-')}
                       </TableCell>
                       <TableCell className="hidden lg:table-cell text-sm text-[#7FB3AE] capitalize">
-                        {ticket.tier}
+                        {String(ticket.tier ?? '-')}
                       </TableCell>
                       <TableCell>
                         <span className="font-mono text-sm font-semibold text-[#00A39D]">
-                          {ticket.wristbandCode || '—'}
+                          {String(ticket.wristbandCode ?? '—')}
                         </span>
                       </TableCell>
                       <TableCell className="hidden sm:table-cell text-sm text-[#7FB3AE]">
                         {ticket.redeemedAt
-                          ? formatDateTimeShort(ticket.redeemedAt)
+                          ? formatDateTimeShort(String(ticket.redeemedAt))
                           : '—'}
                       </TableCell>
-                      <TableCell>{getStatusBadge(ticket.status)}</TableCell>
+                      <TableCell>{getStatusBadge(String(ticket.status))}</TableCell>
                     </TableRow>
                   ))
                 )}

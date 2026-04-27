@@ -26,11 +26,12 @@ import {
   RotateCcw,
   Home,
 } from "lucide-react";
-import { formatRupiah } from "@/lib/mock-data";
+import { formatRupiah } from "@/lib/utils";
 import type { Order } from "@/lib/mock-data";
 import { useAuthStore } from "@/lib/auth-store";
 import { usePageStore } from "@/lib/page-store";
 import { cn } from "@/lib/utils";
+import { usePaymentStatus } from "@/hooks/use-api";
 
 const TIMELINE_STEPS = [
   { label: "Pesanan dibuat", icon: Ticket },
@@ -44,6 +45,9 @@ export default function PaymentStatusPage() {
   const { currentOrderId, navigateTo } = usePageStore();
   const { getOrder, updateOrder } = useAuthStore();
   const order = getOrder(currentOrderId || "");
+
+  // Use API hook for payment status polling
+  const { data: paymentStatusData } = usePaymentStatus(currentOrderId || "");
 
   const [currentStep, setCurrentStep] = useState(1); // 0-4
   const [pollCount, setPollCount] = useState(0);

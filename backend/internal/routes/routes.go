@@ -40,6 +40,14 @@ func Setup(app *fiber.App, db *gorm.DB) {
         public.Get("/events/:slug", handlers.GetEventBySlug(db))
         public.Get("/events/:eventId/ticket-types", handlers.GetEventTicketTypes(db))
 
+        // Public - Midtrans payment callback (called by Midtrans servers, NO AUTH)
+        public.Post("/payment/callback", handlers.PaymentCallback(db))
+
+        // SSE (Server-Sent Events) - real-time (supports ?token= query param for EventSource)
+        // Placed outside auth group because EventSource API cannot send custom headers;
+        // JWTAuthSSE reads token from Authorization header OR ?token= query param.
+        api.Get("/events/stream", middleware.JWTAuthSSE(), handlers.SSEStream(db))
+
         // === AUTHENTICATED ROUTES ===
         auth := api.Group("", middleware.JWTAuth())
 
@@ -47,8 +55,17 @@ func Setup(app *fiber.App, db *gorm.DB) {
         auth.Post("/auth/logout", handlers.Logout(db))
         auth.Get("/auth/me", handlers.GetMe(db))
 
-        // SSE (Server-Sent Events) - real-time
-        auth.Get("/events/stream", handlers.SSEStream(db))
+        // === ORDER ROUTES ===
+        orders := auth.Group("/orders")
+        orders.Post("/", handlers.CreateOrder(db))
+        orders.Get("/", handlers.GetUserOrders(db))
+        orders.Get("/:orderId", handlers.GetOrderDetail(db))
+        orders.Post("/:orderId/cancel", handlers.CancelOrder(db))
+
+        // === PAYMENT ROUTES ===
+        payment := auth.Group("/payment")
+        payment.Post("/create", handlers.CreatePayment(db))
+        payment.Get("/status/:orderId", handlers.GetPaymentStatus(db))
 
         // === GATE STAFF ROUTES ===
         gate := auth.Group("/gate", middleware.RoleRequired("GATE_STAFF"))
@@ -84,6 +101,26 @@ func Setup(app *fiber.App, db *gorm.DB) {
         admin.Get("/users", handlers.GetAdminUsers(db))
         admin.Get("/events", handlers.GetAdminEvents(db))
         admin.Get("/analytics", handlers.GetAdminAnalytics(db))
+
+        // Admin extended routes
+        admin.Get("/tickets", handlers.GetAdminTickets(db))
+        admin.Get("/staff", handlers.GetAdminStaff(db))
+        admin.Get("/counters", handlers.GetAdminCounters(db))
+        admin.Get("/gates", handlers.GetAdminGates(db))
+        admin.Get("/gate-monitoring", handlers.GetAdminGateMonitoring(db))
+        admin.Get("/verifications", handlers.GetAdminVerifications(db))
+        admin.Get("/seats", handlers.GetAdminSeats(db))
+        admin.Get("/settings", handlers.GetAdminSettings(db))
+        admin.Get("/crew-gates", handlers.GetAdminCrewGates(db))
+        admin.Get("/live-monitor", handlers.GetAdminLiveMonitor(db))
+        admin.Patch("/tickets/:ticketId/cancel", handlers.CancelTicket(db))
+        admin.Post("/tickets/expire-pending", handlers.ExpirePendingTickets(db))
+
+        // === NOTIFICATION ROUTES ===
+        notifs := auth.Group("/notifications")
+        notifs.Get("/", handlers.GetNotifications(db))
+        notifs.Patch("/:id/read", handlers.MarkNotificationRead(db))
+        notifs.Post("/read-all", handlers.MarkAllNotificationsRead(db))
 
         // === 404 Handler ===
         app.Use(func(c *fiber.Ctx) error {

@@ -54,8 +54,31 @@ import {
   Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { systemHealth } from '@/lib/admin-mock-data';
-import { mockAuditLogs, type AuditLog } from '@/lib/admin-mock-data';
+import { useAdminSettings } from '@/hooks/use-api';
+import { Skeleton } from '@/components/ui/skeleton';
+
+// ─── LOCAL TYPES ──────────────────────────────────────────────────────────────
+
+type AuditLog = {
+  id: string;
+  timestamp: string;
+  userName: string;
+  action: string;
+  module: string;
+  details: string;
+  ip: string;
+};
+
+type SystemHealth = {
+  cpuUsage: number;
+  memoryUsage: number;
+  diskUsage: number;
+  dbStatus: string;
+  queueDepth: number;
+  avgResponseTime: number;
+  errorRate: number;
+  uptime: string;
+};
 
 // ─── RBAC MATRIX DATA ────────────────────────────────────────────────────
 
@@ -226,6 +249,14 @@ function HealthCard({
 // ─── SETTINGS PAGE ───────────────────────────────────────────────────────
 
 export function SettingsPage() {
+  const { data: settingsData, isLoading, error } = useAdminSettings();
+
+  const systemHealth: SystemHealth = (settingsData as any)?.systemHealth ?? {
+    cpuUsage: 0, memoryUsage: 0, diskUsage: 0, dbStatus: 'connected',
+    queueDepth: 0, avgResponseTime: 0, errorRate: 0, uptime: '0%',
+  };
+  const mockAuditLogs: AuditLog[] = (settingsData as any)?.auditLogs ?? [];
+
   const [actionFilter, setActionFilter] = useState<string>('all');
   const [isEditing, setIsEditing] = useState(false);
 
@@ -253,6 +284,9 @@ export function SettingsPage() {
       description: 'Perubahan konfigurasi telah diterapkan.',
     });
   };
+
+  if (isLoading) return <div className="p-6 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-40 w-full" /></div>;
+  if (error) return <div className="p-6 text-red-500">Failed to load data: {error.message}</div>;
 
   return (
     <div className="space-y-6">

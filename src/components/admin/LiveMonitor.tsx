@@ -1,18 +1,9 @@
 'use client';
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { cn } from '@/lib/utils';
-import {
-  mockGates,
-  mockGateLogs,
-  mockAttendeeStatuses,
-  mockCounters,
-  wristbandConfigs,
-  liveStats,
-  getAttendeeStatusBadge,
-  getGateTypeBadge,
-  formatTime,
-} from '@/lib/operational-mock-data';
+import { cn, formatTime } from '@/lib/utils';
+import { useAdminLiveMonitor } from '@/hooks/use-api';
+import { Skeleton } from '@/components/ui/skeleton';
 
 import {
   Card,
@@ -42,9 +33,101 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
+// ─── LOCAL TYPES & HELPERS ────────────────────────────────────────────────────
+
+type LiveGate = {
+  id: string;
+  name: string;
+  type: 'entry' | 'exit' | 'both';
+  status: string;
+  totalIn: number;
+  totalOut: number;
+  lastScan: string | null;
+};
+
+type GateLog = {
+  id: string;
+  userName: string;
+  ticketCode: string;
+  action: 'IN' | 'OUT';
+  gateName: string;
+  staffName: string;
+  reentryCount: number;
+  timestamp: string;
+};
+
+type AttendeeStatus = {
+  userName: string;
+  ticketCode: string;
+  ticketType: string;
+  currentStatus: string;
+  wristbandCode: string | null;
+  reentryCount: number;
+  lastAction: string;
+  lastActionAt: string;
+  gateUsed: string | null;
+};
+
+type LiveCounter = {
+  id: string;
+  name: string;
+  location: string;
+  status: string;
+  redeemedToday: number;
+  capacity: number;
+};
+
+type WristbandConfig = {
+  ticketTypeId: string;
+  ticketTypeName: string;
+  wristbandColor: string;
+  wristbandColorHex: string;
+  emoji: string;
+};
+
+type LiveStats = {
+  totalInside: number;
+  totalOutside: number;
+  totalRedeemed: number;
+  totalNotRedeemed: number;
+  totalReentries: number;
+  totalGateScans: number;
+  activeGates: number;
+  activeCounters: number;
+};
+
+function getGateTypeBadge(type: LiveGate['type']) {
+  switch (type) {
+    case 'entry': return { label: 'Masuk', color: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30' };
+    case 'exit': return { label: 'Keluar', color: 'text-red-400 bg-red-500/15 border-red-500/30' };
+    case 'both': return { label: 'Masuk/Keluar', color: 'text-amber-400 bg-amber-500/15 border-amber-500/30' };
+  }
+}
+
+function getAttendeeStatusBadge(status: string) {
+  switch (status) {
+    case 'inside_venue': return { label: 'Di Dalam', color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' };
+    case 'outside': return { label: 'Di Luar', color: 'text-blue-400 border-blue-500/30 bg-blue-500/10' };
+    case 'redeemed': return { label: 'Sudah Tukar', color: 'text-amber-400 border-amber-500/30 bg-amber-500/10' };
+    default: return { label: status, color: 'text-gray-400 border-gray-500/30 bg-gray-500/10' };
+  }
+}
+
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 
 export function LiveMonitor() {
+  const { data, isLoading, error } = useAdminLiveMonitor();
+
+  const liveGates: LiveGate[] = (data as any)?.gates ?? [];
+  const gateLogs: GateLog[] = (data as any)?.logs ?? [];
+  const attendeeStatuses: AttendeeStatus[] = (data as any)?.attendees ?? [];
+  const liveCounters: LiveCounter[] = (data as any)?.counters ?? [];
+  const wristbandConfigs: WristbandConfig[] = (data as any)?.wristbandConfigs ?? [];
+  const liveStats: LiveStats = (data as any)?.stats ?? {
+    totalInside: 0, totalOutside: 0, totalRedeemed: 0, totalNotRedeemed: 0,
+    totalReentries: 0, totalGateScans: 0, activeGates: 0, activeCounters: 0,
+  };
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAttendee, setSelectedAttendee] = useState<string | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
@@ -60,12 +143,12 @@ export function LiveMonitor() {
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
-    return mockAttendeeStatuses.filter(
+    return attendeeStatuses.filter(
       (a) =>
         a.userName.toLowerCase().includes(q) ||
         a.ticketCode.toLowerCase().includes(q)
     ).slice(0, 5);
-  }, [searchQuery]);
+  }, [searchQuery, attendeeStatuses]);
 
   // ── Big number cards data ──
   const bigStats = [
@@ -76,6 +159,9 @@ export function LiveMonitor() {
     { label: 'Total Re-entry', value: liveStats.totalReentries, color: 'text-purple-400', bg: 'from-purple-500/10 to-purple-500/5', border: 'border-purple-500/20', icon: RefreshCw },
     { label: 'Gate Scans', value: liveStats.totalGateScans, color: 'text-[#00A39D]', bg: 'from-[#00A39D]/10 to-[#00A39D]/5', border: 'border-[#00A39D]/20', icon: ScanLine },
   ];
+
+  if (isLoading) return <div className="p-6 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-40 w-full" /></div>;
+  if (error) return <div className="p-6 text-red-500">Failed to load data: {error.message}</div>;
 
   return (
     <div className="space-y-6">
@@ -126,13 +212,13 @@ export function LiveMonitor() {
                 <ScanLine className="w-4 h-4 text-[#00A39D]" />
                 Gate Overview
                 <Badge variant="outline" className="text-[10px] text-[#00A39D] border-[#00A39D]/30 ml-auto">
-                  {liveStats.activeGates}/{mockGates.length} aktif
+                  {liveStats.activeGates}/{liveGates.length} aktif
                 </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-                {mockGates.filter(g => g.status === 'active').map((gate) => {
+                {liveGates.filter(g => g.status === 'active').map((gate) => {
                   const typeBadge = getGateTypeBadge(gate.type);
                   const rate = gate.totalIn > 0 ? Math.round(gate.totalIn / 120) : 0;
                   return (
@@ -186,7 +272,7 @@ export function LiveMonitor() {
             <CardContent className="pt-0">
               <ScrollArea className="h-[400px] custom-scrollbar" ref={feedRef}>
                 <div className="space-y-1.5 pr-2">
-                  {mockGateLogs.slice(0, 50).map((log) => (
+                  {gateLogs.slice(0, 50).map((log) => (
                     <div
                       key={log.id}
                       className="flex items-center gap-3 p-2.5 rounded-lg bg-[#0A0F0E]/60 border border-[rgba(0,163,157,0.06)] hover:border-[rgba(0,163,157,0.12)] transition-colors"
@@ -290,7 +376,7 @@ export function LiveMonitor() {
               )}
 
               {selectedAttendee && (() => {
-                const a = mockAttendeeStatuses.find(x => x.ticketCode === selectedAttendee);
+                const a = attendeeStatuses.find(x => x.ticketCode === selectedAttendee);
                 if (!a) return null;
                 const badge = getAttendeeStatusBadge(a.currentStatus);
                 const wbConfig = wristbandConfigs.find(w => w.ticketTypeName === a.ticketType);
@@ -393,7 +479,7 @@ export function LiveMonitor() {
             </CardHeader>
             <CardContent className="pt-0">
               <div className="space-y-1.5">
-                {mockCounters.filter(c => c.status === 'active').map((counter) => {
+                {liveCounters.filter(c => c.status === 'active').map((counter) => {
                   const pct = counter.capacity > 0 ? Math.round((counter.redeemedToday / counter.capacity) * 100) : 0;
                   return (
                     <div

@@ -4,6 +4,8 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "next-themes";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "@/lib/query-client";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -52,10 +54,12 @@ export default function RootLayout({
           disableTransitionOnChange={false}
           storageKey="sheilaon7-theme"
         >
-          <TooltipProvider>
-            {children}
-            <Toaster />
-          </TooltipProvider>
+          <QueryClientProvider client={queryClient}>
+            <TooltipProvider>
+              {children}
+              <Toaster />
+            </TooltipProvider>
+          </QueryClientProvider>
         </ThemeProvider>
       </body>
     </html>

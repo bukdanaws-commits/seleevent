@@ -1,8 +1,7 @@
 import { create } from 'zustand'
-import type { UserRole, UserStatus, IOrder } from '@/lib/types'
-import type { User } from '@/lib/mock-data'
-import { mockUser, mockOrders } from '@/lib/mock-data'
+import type { UserRole, UserStatus, IUser } from '@/lib/types'
 import { setTokens, clearTokens, getAccessToken, apiFetch } from '@/lib/api'
+import { getSSEClient, disconnectSSE } from '@/lib/sse'
 
 // ─── GOOGLE OAUTH CONFIG ──────────────────────────────────────────────────
 
@@ -10,7 +9,7 @@ export const GOOGLE_CLIENT_ID = '503551786622-k3uajo9c2d6om6qnqofsa3b47fvo5o6g.a
 
 // ─── TYPES ─────────────────────────────────────────────────────────────────
 
-interface AuthUser extends User {
+interface AuthUser extends IUser {
   role: UserRole
   status: UserStatus
 }
@@ -20,7 +19,6 @@ interface AuthState {
   user: AuthUser | null
   isAuthenticated: boolean
   isLoading: boolean
-  orders: IOrder[]
   accessToken: string | null
   refreshToken: string | null
 
@@ -28,65 +26,85 @@ interface AuthState {
   login: () => Promise<void>
   loginAsRole: (role: UserRole) => Promise<void>
   logout: () => void
-  setTokens: (access: string, refresh: string) => void
-  addOrder: (order: IOrder) => void
-  updateOrder: (orderId: string, updates: Partial<IOrder>) => void
-  getOrder: (orderId: string) => IOrder | undefined
+  rehydrateSession: () => Promise<void>
+  storeTokens: (access: string, refresh: string) => void
   hasRole: (...roles: UserRole[]) => boolean
 }
 
-// ─── ROLE-BASED MOCK USERS ─────────────────────────────────────────────────
+// ─── ROLE-BASED MOCK USERS (DEV ONLY — for loginAsRole quick testing) ─────
 
 const MOCK_USERS_BY_ROLE: Record<UserRole, AuthUser> = {
   SUPER_ADMIN: {
     id: 'user-superadmin',
+    googleId: '',
     name: 'Bukdan Admin',
     email: 'bukdan@seleevent.id',
     avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Bukdan',
     phone: '081200001111',
     role: 'SUPER_ADMIN',
     status: 'active',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   ADMIN: {
     id: 'user-admin',
+    googleId: '',
     name: 'Rizky Pratama',
     email: 'rizky@seleevent.id',
     avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Rizky',
     phone: '081200002222',
     role: 'ADMIN',
     status: 'active',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   ORGANIZER: {
     id: 'user-organizer',
+    googleId: '',
     name: 'Andi Wijaya',
     email: 'andi.wijaya@gmail.com',
     avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Andi',
     phone: '081200003333',
     role: 'ORGANIZER',
     status: 'active',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   COUNTER_STAFF: {
     id: 'user-counter',
+    googleId: '',
     name: 'Rina Wulandari',
     email: 'rina.w@gmail.com',
     avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Rina',
     phone: '081200006666',
     role: 'COUNTER_STAFF',
     status: 'active',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   GATE_STAFF: {
     id: 'user-gate',
+    googleId: '',
     name: 'Bayu Aditya',
     email: 'bayu.a@gmail.com',
     avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Bayu',
     phone: '081200020001',
     role: 'GATE_STAFF',
     status: 'active',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   PARTICIPANT: {
-    ...mockUser,
+    id: 'user-participant',
+    googleId: '',
+    name: 'Budi Santoso',
+    email: 'budi.santoso@gmail.com',
+    avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Budi',
+    phone: '081234567890',
     role: 'PARTICIPANT',
     status: 'active',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
 }
 
@@ -164,7 +182,6 @@ async function getGoogleIdToken(): Promise<string> {
 
     google.accounts.id.prompt((notification: Record<string, unknown>) => {
       if (notification.isNotDisplayed) {
-        // If One Tap is not displayed, render a button instead
         reject(new Error('Google One Tap not available'))
       }
       if (notification.isSkippedMoment) {
@@ -180,7 +197,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: false,
-  orders: [],
   accessToken: typeof window !== 'undefined' ? getAccessToken() : null,
   refreshToken: null,
 
@@ -191,8 +207,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const googleIdToken = await getGoogleIdToken()
 
       // Step 2: Send to our backend for verification + JWT generation
+      // apiFetch already unwraps the envelope, so we get the data directly
       const response = await apiFetch<{
-        success: boolean
         user: AuthUser
         accessToken: string
         refreshToken: string
@@ -205,36 +221,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // Step 3: Store tokens
       setTokens(response.accessToken, response.refreshToken)
 
+      // Step 4: Connect SSE for real-time updates
+      const sse = getSSEClient()
+      sse.connect(response.accessToken)
+
       set({
         user: response.user,
         isAuthenticated: true,
         isLoading: false,
-        orders: mockOrders as unknown as IOrder[],
         accessToken: response.accessToken,
         refreshToken: response.refreshToken,
       })
     } catch (error) {
       console.error('Google login failed:', error)
-      // Fallback to mock login for development
-      const mockTokens = {
-        access: 'mock_access_token_' + Date.now(),
-        refresh: 'mock_refresh_token_' + Date.now(),
-      }
-      setTokens(mockTokens.access, mockTokens.refresh)
-      set({
-        user: MOCK_USERS_BY_ROLE.PARTICIPANT,
-        isAuthenticated: true,
-        isLoading: false,
-        orders: mockOrders as unknown as IOrder[],
-        accessToken: mockTokens.access,
-        refreshToken: mockTokens.refresh,
-      })
+      // NO mock fallback — show error to user
+      set({ isLoading: false })
+      throw error
     }
   },
 
   loginAsRole: async (role: UserRole) => {
+    // DEV ONLY: Quick role-based login for testing purposes
     set({ isLoading: true })
-    await new Promise((resolve) => setTimeout(resolve, 800))
+    await new Promise((resolve) => setTimeout(resolve, 500))
 
     const mockTokens = {
       access: `mock_token_${role.toLowerCase()}_${Date.now()}`,
@@ -242,6 +251,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     setTokens(mockTokens.access, mockTokens.refresh)
+
+    // Connect SSE even for mock tokens (will fail gracefully)
+    const sse = getSSEClient()
+    sse.connect(mockTokens.access)
 
     set({
       user: MOCK_USERS_BY_ROLE[role],
@@ -253,36 +266,53 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: () => {
+    // Disconnect SSE first
+    disconnectSSE()
     clearTokens()
     set({
       user: null,
       isAuthenticated: false,
       isLoading: false,
-      orders: [],
       accessToken: null,
       refreshToken: null,
     })
   },
 
-  setTokens: (access: string, refresh: string) => {
+  rehydrateSession: async () => {
+    const token = getAccessToken()
+    if (!token) return
+
+    set({ isLoading: true })
+    try {
+      // Call /auth/me to rehydrate the session from existing token
+      const response = await apiFetch<{ user: AuthUser }>('/api/v1/auth/me')
+
+      // Connect SSE
+      const sse = getSSEClient()
+      sse.connect(token)
+
+      set({
+        user: response.user,
+        isAuthenticated: true,
+        isLoading: false,
+        accessToken: token,
+      })
+    } catch {
+      // Token is invalid/expired — clear it
+      clearTokens()
+      set({
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        accessToken: null,
+        refreshToken: null,
+      })
+    }
+  },
+
+  storeTokens: (access: string, refresh: string) => {
     setTokens(access, refresh)
     set({ accessToken: access, refreshToken: refresh })
-  },
-
-  addOrder: (order) => {
-    set((state) => ({
-      orders: [order, ...state.orders],
-    }))
-  },
-
-  updateOrder: (orderId, updates) => {
-    set((state) => ({
-      orders: state.orders.map((o) => (o.id === orderId ? { ...o, ...updates } : o)),
-    }))
-  },
-
-  getOrder: (orderId) => {
-    return get().orders.find((o) => o.id === orderId)
   },
 
   hasRole: (...roles) => {

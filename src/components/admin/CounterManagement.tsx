@@ -2,18 +2,39 @@
 
 import React, { useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import {
-  mockCounters,
-  mockStaffUsers,
-  mockRedemptionConfig,
-  mockRedemptions,
-  getCounterStatusBadge,
-  getRoleLabel,
-  getRoleBadgeColor,
-  type Counter,
-  type StaffUser,
-} from '@/lib/operational-mock-data';
+import { useAdminCounters, useAdminStaff } from '@/hooks/use-api';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+
+// ─── LOCAL TYPES & HELPERS ────────────────────────────────────────────────────
+
+type Counter = {
+  id: string;
+  name: string;
+  location: string;
+  capacity: number;
+  status: 'active' | 'inactive' | 'closed';
+  staffCount: number;
+  redeemedToday: number;
+  openAt: string | null;
+  closeAt: string | null;
+};
+
+function getCounterStatusBadge(status: Counter['status']) {
+  switch (status) {
+    case 'active': return { label: 'Aktif', color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' };
+    case 'inactive': return { label: 'Nonaktif', color: 'text-gray-400 border-gray-500/30 bg-gray-500/10' };
+    case 'closed': return { label: 'Tutup', color: 'text-red-400 border-red-500/30 bg-red-500/10' };
+    default: return { label: status, color: 'text-gray-400 border-gray-500/30' };
+  }
+}
+
+type RedemptionConfig = {
+  startDate: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
+};
 
 import {
   Card,
@@ -69,7 +90,14 @@ import {
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 
 export function CounterManagement() {
-  const [counters, setCounters] = useState<Counter[]>([...mockCounters]);
+  const { data: apiCountersData, isLoading, error } = useAdminCounters();
+  const { data: apiStaff } = useAdminStaff();
+
+  const apiCounters: Counter[] = (apiCountersData as any)?.data ?? (apiCountersData as any) ?? [];
+  const apiRedemptionConfig: RedemptionConfig = (apiCountersData as any)?.redemptionConfig ?? { startDate: '', endDate: '', startTime: '', endTime: '' };
+  const staffUsers: any[] = (apiStaff as any)?.data ?? (apiStaff as any) ?? [];
+
+  const counters: Counter[] = apiCounters.length > 0 ? apiCounters : [];
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [editCounter, setEditCounter] = useState<Counter | null>(null);
@@ -79,7 +107,7 @@ export function CounterManagement() {
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
 
   // Redemption config state
-  const [redemptionConfig, setRedemptionConfig] = useState({ ...mockRedemptionConfig });
+  const [redemptionConfig, setRedemptionConfig] = useState<RedemptionConfig>(apiRedemptionConfig.startDate ? apiRedemptionConfig : { startDate: '', endDate: '', startTime: '', endTime: '' });
 
   // Add counter form
   const [addForm, setAddForm] = useState({
@@ -125,31 +153,20 @@ export function CounterManagement() {
 
   // ── Helpers ──
   const getCounterStaff = (counterName: string) =>
-    mockStaffUsers.filter(
-      (s) => s.role === 'COUNTER_STAFF' && s.assignedLocation === counterName
-    );
+    staffUsers.filter((s: any) => s.role === 'COUNTER_STAFF' && s.assignedLocation === counterName);
 
   const handleAddCounter = () => {
     if (!addForm.name.trim() || !addForm.location.trim()) {
       toast.error('Nama dan lokasi wajib diisi');
       return;
     }
-    const newCounter: Counter = {
-      id: `ctr-${String(counters.length + 1).padStart(3, '0')}`,
-      name: addForm.name,
-      location: addForm.location,
-      capacity: parseInt(addForm.capacity) || 300,
-      status: 'inactive',
-      staffCount: 0,
-      redeemedToday: 0,
-      openAt: null,
-      closeAt: null,
-    };
-    setCounters((prev) => [...prev, newCounter]);
+    toast.info('Counter creation will be handled by backend API');
     setAddForm({ name: '', location: '', capacity: '300' });
     setAddDialogOpen(false);
-    toast.success(`Counter "${newCounter.name}" berhasil ditambahkan`);
   };
+
+  if (isLoading) return <div className="p-6 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-40 w-full" /></div>;
+  if (error) return <div className="p-6 text-red-500">Failed to load data: {error.message}</div>;
 
   const handleEditCounter = (counter: Counter) => {
     setEditCounter(counter);
@@ -162,15 +179,8 @@ export function CounterManagement() {
 
   const handleSaveEdit = () => {
     if (!editCounter) return;
-    setCounters((prev) =>
-      prev.map((c) =>
-        c.id === editCounter.id
-          ? { ...c, status: editForm.status, capacity: parseInt(editForm.capacity) || c.capacity }
-          : c
-      )
-    );
+    toast.info('Counter update will be handled by backend API');
     setEditDialogOpen(false);
-    toast.success(`Counter "${editCounter.name}" berhasil diperbarui`);
   };
 
   const handleSaveConfig = () => {
@@ -476,8 +486,8 @@ export function CounterManagement() {
             <div className="space-y-3">
               {(() => {
                 const staff = getCounterStaff(selectedCounter.name);
-                const available = mockStaffUsers.filter(
-                  (s) =>
+                const available = staffUsers.filter(
+                  (s: any) =>
                     s.role === 'COUNTER_STAFF' &&
                     s.status === 'active' &&
                     s.assignedLocation !== selectedCounter.name

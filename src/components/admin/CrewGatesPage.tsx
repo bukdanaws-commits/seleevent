@@ -1,15 +1,35 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { cn } from '@/lib/utils';
-import { formatRupiah } from '@/lib/mock-data';
-import {
-  mockCrew,
-  mockGates,
-  type CrewMember,
-  type GateConfig,
-} from '@/lib/admin-mock-data';
+import { cn, formatRupiah } from '@/lib/utils';
+import { useAdminCrewGates } from '@/hooks/use-api';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+
+// ─── LOCAL TYPES ───────────────────────────────────────────────────────────────
+
+type CrewMember = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: 'ORGANIZER' | 'SCANNER_CREW' | 'VERIFICATION_ADMIN' | 'REDEEM_CREW';
+  assignedGate: string | null;
+  assignedStation: string | null;
+  status: 'active' | 'inactive';
+  lastActive: string;
+};
+
+type GateConfig = {
+  id: string;
+  name: string;
+  type: 'entry' | 'exit' | 'both';
+  location: string;
+  minAccessLevel: string;
+  capacityPerMinute: number;
+  currentScanner: string | null;
+  isActive: boolean;
+};
 
 import {
   Card,
@@ -181,6 +201,11 @@ const deviceTypeConfig: Record<
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 
 export function CrewGatesPage() {
+  const { data, isLoading, error } = useAdminCrewGates();
+
+  const crewMembers: CrewMember[] = (data as any)?.data ? (data as any).data.filter((c: any) => c.role) : (data as any)?.crew ?? [];
+  const gateConfigs: GateConfig[] = (data as any)?.data ? (data as any).data.filter((c: any) => c.type) : (data as any)?.gates ?? [];
+
   // ── Crew State ──
   const [crewSearch, setCrewSearch] = useState('');
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
@@ -189,38 +214,38 @@ export function CrewGatesPage() {
 
   // ── Gate State ──
   const [gateToggles, setGateToggles] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(mockGates.map((g) => [g.id, g.isActive]))
+    () => Object.fromEntries(gateConfigs.map((g) => [g.id, g.isActive]))
   );
 
   // ── Crew stats ──
   const crewStats = useMemo(
     () => ({
-      total: mockCrew.length,
-      active: mockCrew.filter((c) => c.status === 'active').length,
-      inactive: mockCrew.filter((c) => c.status === 'inactive').length,
-      organizers: mockCrew.filter((c) => c.role === 'ORGANIZER').length,
-      scannerCrew: mockCrew.filter((c) => c.role === 'SCANNER_CREW').length,
+      total: crewMembers.length,
+      active: crewMembers.filter((c) => c.status === 'active').length,
+      inactive: crewMembers.filter((c) => c.status === 'inactive').length,
+      organizers: crewMembers.filter((c) => c.role === 'ORGANIZER').length,
+      scannerCrew: crewMembers.filter((c) => c.role === 'SCANNER_CREW').length,
     }),
-    []
+    [crewMembers]
   );
 
   // ── Filtered crew ──
   const filteredCrew = useMemo(() => {
-    if (!crewSearch.trim()) return mockCrew;
+    if (!crewSearch.trim()) return crewMembers;
     const q = crewSearch.toLowerCase();
-    return mockCrew.filter(
+    return crewMembers.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
         c.email.toLowerCase().includes(q) ||
         (c.assignedGate && c.assignedGate.toLowerCase().includes(q)) ||
         (c.assignedStation && c.assignedStation.toLowerCase().includes(q))
     );
-  }, [crewSearch]);
+  }, [crewSearch, crewMembers]);
 
   const handleToggleGate = (gateId: string) => {
     setGateToggles((prev) => {
       const next = !prev[gateId];
-      const gate = mockGates.find((g) => g.id === gateId);
+      const gate = gateConfigs.find((g) => g.id === gateId);
       toast.success(
         `${gate?.name || gateId} ${next ? 'activated' : 'deactivated'} successfully`
       );
@@ -261,6 +286,9 @@ export function CrewGatesPage() {
     if (diffHours < 24) return `${diffHours}h ago`;
     return `${Math.floor(diffHours / 24)}d ago`;
   };
+
+  if (isLoading) return <div className="p-6 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-40 w-full" /></div>;
+  if (error) return <div className="p-6 text-red-500">Failed to load data: {error.message}</div>;
 
   return (
     <div className="space-y-6">
@@ -502,12 +530,12 @@ export function CrewGatesPage() {
             Gates Configuration
           </h3>
           <Badge variant="outline" className="text-xs text-[#7FB3AE] border-[#7FB3AE]/20">
-            {mockGates.filter((g) => gateToggles[g.id]).length}/{mockGates.length} active
+            {gateConfigs.filter((g) => gateToggles[g.id]).length}/{gateConfigs.length} active
           </Badge>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {mockGates.map((gate) => {
+          {gateConfigs.map((gate) => {
             const gt = gateTypeConfig[gate.type];
             const isActive = gateToggles[gate.id];
 

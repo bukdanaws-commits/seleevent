@@ -1,16 +1,9 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { cn } from '@/lib/utils';
-import {
-  mockStaffUsers,
-  getRoleBadgeColor,
-  getRoleLabel,
-  getStatusBadgeColor,
-  type StaffUser,
-  type UserRole,
-} from '@/lib/operational-mock-data';
-import { formatDateTimeShort } from '@/lib/operational-mock-data';
+import { cn, formatDateTimeShort } from '@/lib/utils';
+import { useAdminStaff } from '@/hooks/use-api';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 
 import {
@@ -58,6 +51,7 @@ import {
   Activity,
   Users,
   Filter,
+  AlertTriangle,
 } from 'lucide-react';
 
 // ─── ROLE TABS ───────────────────────────────────────────────────────────────
@@ -72,16 +66,48 @@ const roleTabs: { value: string; label: string }[] = [
   { value: 'PARTICIPANT', label: 'Peserta' },
 ];
 
+type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'COUNTER_STAFF' | 'GATE_STAFF' | 'ORGANIZER' | 'PARTICIPANT';
+
+function getRoleBadgeColor(role: string) {
+  switch (role) {
+    case 'SUPER_ADMIN': return 'bg-[#F8AD3C]/15 text-[#F8AD3C] border-[#F8AD3C]/30';
+    case 'ADMIN': return 'bg-[#00A39D]/15 text-[#00A39D] border-[#00A39D]/30';
+    case 'COUNTER_STAFF': return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
+    case 'GATE_STAFF': return 'bg-blue-500/15 text-blue-400 border-blue-500/30';
+    case 'ORGANIZER': return 'bg-purple-500/15 text-purple-400 border-purple-500/30';
+    default: return 'bg-gray-500/15 text-gray-400 border-gray-500/30';
+  }
+}
+
+function getRoleLabel(role: string) {
+  switch (role) {
+    case 'SUPER_ADMIN': return 'Super Admin';
+    case 'ADMIN': return 'Admin';
+    case 'COUNTER_STAFF': return 'Counter Staff';
+    case 'GATE_STAFF': return 'Gate Staff';
+    case 'ORGANIZER': return 'Organizer';
+    case 'PARTICIPANT': return 'Peserta';
+    default: return role;
+  }
+}
+
+function getStatusBadgeColor(status: string) {
+  switch (status) {
+    case 'active': return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
+    case 'inactive': return 'bg-gray-500/15 text-gray-400 border-gray-500/30';
+    default: return 'bg-gray-500/15 text-gray-400 border-gray-500/30';
+  }
+}
+
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 
 export function StaffManagement() {
-  const [staff] = useState<StaffUser[]>([...mockStaffUsers]);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [selectedStaff, setSelectedStaff] = useState<StaffUser | null>(null);
+  const [selectedStaff, setSelectedStaff] = useState<Record<string, unknown> | null>(null);
 
   // Add form
   const [addForm, setAddForm] = useState({
@@ -98,6 +124,12 @@ export function StaffManagement() {
     status: '' as 'active' | 'inactive',
   });
 
+  const { data: staffData, isLoading, error } = useAdminStaff();
+  const staff = useMemo(() => {
+    const raw = (staffData as { data?: unknown[] } | undefined)?.data || [];
+    return raw as Record<string, unknown>[];
+  }, [staffData]);
+
   // ── Filtered data ──
   const filteredStaff = useMemo(() => {
     let result = [...staff];
@@ -111,8 +143,8 @@ export function StaffManagement() {
       const q = searchQuery.toLowerCase();
       result = result.filter(
         (s) =>
-          s.name.toLowerCase().includes(q) ||
-          s.email.toLowerCase().includes(q)
+          String(s.name || '').toLowerCase().includes(q) ||
+          String(s.email || '').toLowerCase().includes(q)
       );
     }
     return result;
@@ -130,14 +162,7 @@ export function StaffManagement() {
     [staff]
   );
 
-  // ── Helpers ──
-  const allLocations = useMemo(() => {
-    const counterLocations = [...new Set(mockStaffUsers.filter(s => s.role === 'COUNTER_STAFF' && s.assignedLocation).map(s => s.assignedLocation!))];
-    const gateLocations = [...new Set(mockStaffUsers.filter(s => s.role === 'GATE_STAFF' && s.assignedLocation).map(s => s.assignedLocation!))];
-    return { counterLocations, gateLocations };
-  }, []);
-
-  const isSuperAdmin = (role: UserRole) => role === 'SUPER_ADMIN';
+  const isSuperAdmin = (role: string) => role === 'SUPER_ADMIN';
 
   const handleAddStaff = () => {
     if (!addForm.email.trim()) {
@@ -149,12 +174,12 @@ export function StaffManagement() {
     setAddDialogOpen(false);
   };
 
-  const handleEditStaff = (s: StaffUser) => {
+  const handleEditStaff = (s: Record<string, unknown>) => {
     setSelectedStaff(s);
     setEditForm({
-      role: s.role,
-      assignedLocation: s.assignedLocation || '',
-      status: s.status,
+      role: String(s.role || '') as UserRole,
+      assignedLocation: String(s.assignedLocation || ''),
+      status: String(s.status || 'active') as 'active' | 'inactive',
     });
     setEditDialogOpen(true);
   };
@@ -162,8 +187,32 @@ export function StaffManagement() {
   const handleSaveEdit = () => {
     if (!selectedStaff) return;
     setEditDialogOpen(false);
-    toast.success(`Data "${selectedStaff.name}" berhasil diperbarui`);
+    toast.success(`Data "${String(selectedStaff.name || '')}" berhasil diperbarui`);
   };
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center space-y-3">
+          <AlertTriangle className="w-10 h-10 text-red-400 mx-auto" />
+          <p className="text-red-400 font-medium">Failed to load staff</p>
+          <p className="text-muted-foreground text-sm">{String(error)}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
+        </div>
+        <Skeleton className="h-96 w-full rounded-lg" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -178,11 +227,7 @@ export function StaffManagement() {
             Manajemen staff, role, shift, dan assignment lokasi
           </p>
         </div>
-        <Button
-          size="sm"
-          onClick={() => setAddDialogOpen(true)}
-          className="bg-[#00A39D] text-white hover:bg-[#00A39D]/90"
-        >
+        <Button size="sm" onClick={() => setAddDialogOpen(true)} className="bg-[#00A39D] text-white hover:bg-[#00A39D]/90">
           <Plus className="w-4 h-4 mr-1.5" />
           Tambah Staff
         </Button>
@@ -215,7 +260,6 @@ export function StaffManagement() {
 
       {/* ═══════════ FILTER ROW ═══════════ */}
       <div className="space-y-3">
-        {/* Role tabs */}
         <div className="flex flex-wrap gap-1.5">
           {roleTabs.map((tab) => (
             <Button
@@ -235,7 +279,6 @@ export function StaffManagement() {
           ))}
         </div>
 
-        {/* Search + status filter */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#7FB3AE]" />
@@ -297,12 +340,12 @@ export function StaffManagement() {
                   </TableRow>
                 ) : (
                   filteredStaff.map((s) => {
-                    const roleColor = getRoleBadgeColor(s.role);
-                    const statusColor = getStatusBadgeColor(s.status);
-                    const sa = isSuperAdmin(s.role);
+                    const roleColor = getRoleBadgeColor(String(s.role || ''));
+                    const statusColor = getStatusBadgeColor(String(s.status || ''));
+                    const sa = isSuperAdmin(String(s.role || ''));
                     return (
                       <TableRow
-                        key={s.id}
+                        key={String(s.id)}
                         className="border-[rgba(0,163,157,0.06)] hover:bg-[rgba(0,163,157,0.04)]"
                       >
                         <TableCell>
@@ -313,31 +356,31 @@ export function StaffManagement() {
                               s.role === 'GATE_STAFF' ? 'bg-blue-500/10 text-blue-400' :
                               'bg-[rgba(0,163,157,0.1)] text-[#00A39D]'
                             )}>
-                              {s.name.split(' ').map(n => n[0]).join('')}
+                              {String(s.name || '').split(' ').map(n => n[0]).join('')}
                             </div>
-                            <span className="text-sm text-white font-medium">{s.name}</span>
+                            <span className="text-sm text-white font-medium">{String(s.name || '')}</span>
                           </div>
                         </TableCell>
                         <TableCell className="text-xs text-[#7FB3AE] flex items-center gap-1">
                           <Mail className="w-3 h-3 shrink-0" />
-                          {s.email}
+                          {String(s.email || '')}
                         </TableCell>
                         <TableCell className="text-xs text-[#7FB3AE] hidden md:table-cell flex items-center gap-1">
                           <Phone className="w-3 h-3 shrink-0" />
-                          {s.phone}
+                          {String(s.phone || '—')}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={cn('text-[10px] font-semibold', roleColor)}>
-                            {getRoleLabel(s.role)}
+                            {getRoleLabel(String(s.role || ''))}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-xs text-[#7FB3AE] hidden lg:table-cell flex items-center gap-1">
                           <MapPin className="w-3 h-3 shrink-0" />
-                          {s.assignedLocation || '—'}
+                          {String(s.assignedLocation || '—')}
                         </TableCell>
                         <TableCell className="text-xs text-[#7FB3AE] hidden lg:table-cell flex items-center gap-1">
                           <Clock className="w-3 h-3 shrink-0" />
-                          {s.shift || '—'}
+                          {String(s.shift || '—')}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={cn('text-[10px]', statusColor)}>
@@ -345,10 +388,10 @@ export function StaffManagement() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-xs text-[#7FB3AE] hidden xl:table-cell">
-                          {formatDateTimeShort(s.lastActive)}
+                          {s.lastActive ? formatDateTimeShort(String(s.lastActive)) : '—'}
                         </TableCell>
                         <TableCell className="text-xs text-white font-medium hidden xl:table-cell">
-                          {s.totalScans.toLocaleString('id-ID')}
+                          {Number(s.totalScans || 0).toLocaleString('id-ID')}
                         </TableCell>
                         <TableCell>
                           <Button
@@ -375,7 +418,6 @@ export function StaffManagement() {
             </Table>
           </div>
 
-          {/* Footer count */}
           <div className="px-4 py-3 border-t border-[rgba(0,163,157,0.1)]">
             <p className="text-xs text-[#7FB3AE]">
               Menampilkan {filteredStaff.length} dari {staff.length} staff
@@ -420,22 +462,13 @@ export function StaffManagement() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="text-[#7FB3AE] text-sm">
-                Assign ke {addForm.role === 'COUNTER_STAFF' ? 'Counter' : 'Gate'}
-              </Label>
-              <Select
+              <Label className="text-[#7FB3AE] text-sm">Assign ke {addForm.role === 'COUNTER_STAFF' ? 'Counter' : 'Gate'}</Label>
+              <Input
                 value={addForm.assignedLocation}
-                onValueChange={(v) => setAddForm({ ...addForm, assignedLocation: v })}
-              >
-                <SelectTrigger className="bg-[#0A0F0E] border-[rgba(0,163,157,0.15)] text-white">
-                  <SelectValue placeholder="Pilih lokasi..." />
-                </SelectTrigger>
-                <SelectContent className="bg-[#111918] border-[rgba(0,163,157,0.2)]">
-                  {(addForm.role === 'COUNTER_STAFF' ? allLocations.counterLocations : allLocations.gateLocations).map((loc) => (
-                    <SelectItem key={loc} value={loc}>{loc}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(e) => setAddForm({ ...addForm, assignedLocation: e.target.value })}
+                placeholder="Masukkan lokasi..."
+                className="bg-[#0A0F0E] border-[rgba(0,163,157,0.15)] text-white placeholder:text-[#7FB3AE]/50"
+              />
             </div>
             <div className="space-y-2">
               <Label className="text-[#7FB3AE] text-sm">Shift</Label>
@@ -455,19 +488,8 @@ export function StaffManagement() {
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button
-              variant="ghost"
-              onClick={() => setAddDialogOpen(false)}
-              className="text-[#7FB3AE] hover:text-white hover:bg-[rgba(0,163,157,0.1)]"
-            >
-              Batal
-            </Button>
-            <Button
-              onClick={handleAddStaff}
-              className="bg-[#00A39D] text-white hover:bg-[#00A39D]/90"
-            >
-              Tambah
-            </Button>
+            <Button variant="ghost" onClick={() => setAddDialogOpen(false)} className="text-[#7FB3AE] hover:text-white hover:bg-[rgba(0,163,157,0.1)]">Batal</Button>
+            <Button onClick={handleAddStaff} className="bg-[#00A39D] text-white hover:bg-[#00A39D]/90">Tambah</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -476,9 +498,9 @@ export function StaffManagement() {
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="bg-[#111918] border-[rgba(0,163,157,0.2)] max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-white">Edit Staff — {selectedStaff?.name}</DialogTitle>
+            <DialogTitle className="text-white">Edit Staff — {selectedStaff ? String(selectedStaff.name || '') : ''}</DialogTitle>
             <DialogDescription className="text-[#7FB3AE]">
-              {selectedStaff?.email}
+              {selectedStaff ? String(selectedStaff.email || '') : ''}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -491,17 +513,17 @@ export function StaffManagement() {
                     selectedStaff.role === 'GATE_STAFF' ? 'bg-blue-500/10 text-blue-400' :
                     'bg-[rgba(0,163,157,0.1)] text-[#00A39D]'
                   )}>
-                    {selectedStaff.name.split(' ').map(n => n[0]).join('')}
+                    {String(selectedStaff.name || '').split(' ').map(n => n[0]).join('')}
                   </div>
                   <div>
-                    <p className="text-sm text-white font-medium">{selectedStaff.name}</p>
-                    <Badge variant="outline" className={cn('text-[10px] font-semibold mt-1', getRoleBadgeColor(selectedStaff.role))}>
-                      {getRoleLabel(selectedStaff.role)}
+                    <p className="text-sm text-white font-medium">{String(selectedStaff.name || '')}</p>
+                    <Badge variant="outline" className={cn('text-[10px] font-semibold mt-1', getRoleBadgeColor(String(selectedStaff.role || '')))}>
+                      {getRoleLabel(String(selectedStaff.role || ''))}
                     </Badge>
                   </div>
                 </div>
 
-                {!isSuperAdmin(selectedStaff.role) && (
+                {!isSuperAdmin(String(selectedStaff.role || '')) && (
                   <>
                     <div className="space-y-2">
                       <Label className="text-[#7FB3AE] text-sm">Role</Label>
@@ -522,23 +544,12 @@ export function StaffManagement() {
                     </div>
                     <div className="space-y-2">
                       <Label className="text-[#7FB3AE] text-sm">Assign Lokasi</Label>
-                      <Select
+                      <Input
                         value={editForm.assignedLocation}
-                        onValueChange={(v) => setEditForm({ ...editForm, assignedLocation: v })}
-                      >
-                        <SelectTrigger className="bg-[#0A0F0E] border-[rgba(0,163,157,0.15)] text-white">
-                          <SelectValue placeholder="Kosongkan = unassign" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-[#111918] border-[rgba(0,163,157,0.2)]">
-                          <SelectItem value="__none__">— Tidak Assign —</SelectItem>
-                          {allLocations.counterLocations.map((loc) => (
-                            <SelectItem key={loc} value={loc}>{loc}</SelectItem>
-                          ))}
-                          {allLocations.gateLocations.map((loc) => (
-                            <SelectItem key={loc} value={loc}>{loc}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        onChange={(e) => setEditForm({ ...editForm, assignedLocation: e.target.value })}
+                        placeholder="Kosongkan = unassign"
+                        className="bg-[#0A0F0E] border-[rgba(0,163,157,0.15)] text-white"
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-[#7FB3AE] text-sm">Status</Label>
@@ -561,20 +572,8 @@ export function StaffManagement() {
             )}
           </div>
           <DialogFooter className="gap-2">
-            <Button
-              variant="ghost"
-              onClick={() => setEditDialogOpen(false)}
-              className="text-[#7FB3AE] hover:text-white hover:bg-[rgba(0,163,157,0.1)]"
-            >
-              Batal
-            </Button>
-            <Button
-              onClick={handleSaveEdit}
-              disabled={isSuperAdmin(selectedStaff?.role || 'PARTICIPANT')}
-              className="bg-[#00A39D] text-white hover:bg-[#00A39D]/90 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Simpan
-            </Button>
+            <Button variant="ghost" onClick={() => setEditDialogOpen(false)} className="text-[#7FB3AE] hover:text-white hover:bg-[rgba(0,163,157,0.1)]">Batal</Button>
+            <Button onClick={handleSaveEdit} disabled={isSuperAdmin(selectedStaff?.role as string || 'PARTICIPANT')} className="bg-[#00A39D] text-white hover:bg-[#00A39D]/90 disabled:opacity-40 disabled:cursor-not-allowed">Simpan</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
