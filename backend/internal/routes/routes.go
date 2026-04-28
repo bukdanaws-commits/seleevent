@@ -24,7 +24,17 @@ func Setup(app *fiber.App, db *gorm.DB, hub *services.SSEHub) {
         }))
 
         // Health check — verifies both HTTP server and database connectivity
+        // If db is nil (degraded mode), returns 503 so Cloud Run knows the service
+        // is alive but unhealthy. This prevents Cloud Run from killing the container
+        // before the database becomes available.
         app.Get("/health", func(c *fiber.Ctx) error {
+                if db == nil {
+                        return c.Status(503).JSON(fiber.Map{
+                                "status":  "unhealthy",
+                                "service": "seleevent-api",
+                                "error":   "database not connected (degraded mode)",
+                        })
+                }
                 // Verify DB is reachable (critical for Cloud Run liveness probe)
                 sqlDB, err := db.DB()
                 if err != nil || sqlDB.Ping() != nil {
@@ -39,6 +49,18 @@ func Setup(app *fiber.App, db *gorm.DB, hub *services.SSEHub) {
 
         // API v1 group
         api := app.Group("/api/v1")
+
+        // Guard middleware: return 503 if database is not connected (degraded mode)
+        // This prevents panics in route handlers when db is nil
+        api.Use(func(c *fiber.Ctx) error {
+                if db == nil {
+                        return c.Status(503).JSON(fiber.Map{
+                                "success": false,
+                                "error":   "Service unavailable: database not connected",
+                        })
+                }
+                return c.Next()
+        })
 
         // === PUBLIC ROUTES (no auth required) ===
         public := api.Group("")

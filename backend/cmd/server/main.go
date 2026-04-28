@@ -29,10 +29,20 @@ func main() {
                 config.Cfg.App.Port = port
         }
 
+        log.Printf("SeleEvent API v%s starting...", version)
+        log.Printf("Environment: %s", config.Cfg.App.Env)
+        log.Printf("Database driver: %s", config.Cfg.DB.Driver)
+        log.Printf("Database host: %s", config.Cfg.DB.Host)
+        log.Printf("Database name: %s", config.Cfg.DB.Name)
+        log.Printf("Database user: %s", config.Cfg.DB.User)
+
         // Connect to database (auto-migrates models inside Connect)
+        // In production, this retries with exponential backoff up to 10 times.
         db, err := database.Connect(config.Cfg)
         if err != nil {
-                log.Fatalf("Failed to connect to database: %v", err)
+                log.Printf("⚠️  Failed to connect to database: %v", err)
+                log.Printf("⚠️  Starting server in degraded mode (API endpoints will return errors)")
+                log.Printf("⚠️  Check: 1) Database exists  2) User exists  3) Password is correct  4) Cloud SQL instance is reachable")
         }
 
         // Start SSE Hub
@@ -56,9 +66,7 @@ func main() {
 
         // ── Start server in goroutine ─────────────────────────────────────────
         port := config.Cfg.App.Port
-        log.Printf("SeleEvent API v%s starting on port %s", version, port)
-        log.Printf("Environment: %s", config.Cfg.App.Env)
-        log.Printf("Database: %s", config.Cfg.DB.Driver)
+        log.Printf("Server listening on port %s", port)
 
         go func() {
                 if err := app.Listen(":" + port); err != nil {
@@ -86,11 +94,13 @@ func main() {
         // Close SSE hub (notifies all connected clients)
         services.Hub.Close()
 
-        // Close database connections
-        sqlDB, _ := db.DB()
-        if sqlDB != nil {
-                if err := sqlDB.Close(); err != nil {
-                        log.Printf("Error closing database: %v", err)
+        // Close database connections (guard against nil db)
+        if db != nil {
+                sqlDB, _ := db.DB()
+                if sqlDB != nil {
+                        if err := sqlDB.Close(); err != nil {
+                                log.Printf("Error closing database: %v", err)
+                        }
                 }
         }
 

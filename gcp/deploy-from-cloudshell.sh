@@ -187,7 +187,34 @@ gcloud storage buckets add-iam-policy-binding gs://$BUCKET \
   --member="serviceAccount:$SA" --role=roles/storage.admin \
   --quiet 2>/dev/null || true
 
-# ── 7. Build & Deploy Backend ───────────────────────────────────────────────
+# ── 7. Setup Cloud SQL Database ─────────────────────────────────────────────
+info "Setting up Cloud SQL database..."
+
+# Use Cloud SQL Admin API to create database and user
+# First, check if the database exists
+DB_EXISTS=$(gcloud sql databases list --instance=$INSTANCE_NAME --project=$PROJECT_ID --format="value(name)" 2>/dev/null | grep -c "^eventku$" || true)
+
+if [ "$DB_EXISTS" -eq 0 ]; then
+  info "Creating database 'eventku'..."
+  gcloud sql databases create eventku --instance=$INSTANCE_NAME --project=$PROJECT_ID
+else
+  info "Database 'eventku' already exists"
+fi
+
+# Check if the user exists
+USER_EXISTS=$(gcloud sql users list --instance=$INSTANCE_NAME --project=$PROJECT_ID --format="value(name)" 2>/dev/null | grep -c "^eventku$" || true)
+
+if [ "$USER_EXISTS" -eq 0 ]; then
+  info "Creating database user 'eventku'..."
+  gcloud sql users create eventku --instance=$INSTANCE_NAME --project=$PROJECT_ID --password="$DB_PASSWORD"
+else
+  info "User 'eventku' already exists, updating password..."
+  gcloud sql users set-password eventku --instance=$INSTANCE_NAME --project=$PROJECT_ID --password="$DB_PASSWORD" --host=%
+fi
+
+info "Database setup complete!"
+
+# ── 8. Build & Deploy Backend ───────────────────────────────────────────────
 info "Building and deploying backend..."
 IMAGE_API="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/eventku-api"
 
@@ -202,7 +229,7 @@ gcloud builds submit . \
 
 info "Backend deployed!"
 
-# ── 8. Get Backend URL ──────────────────────────────────────────────────────
+# ── 9. Get Backend URL ──────────────────────────────────────────────────────
 BACKEND_URL=$(gcloud run services describe eventku-api \
   --region=$REGION \
   --project=$PROJECT_ID \
@@ -210,7 +237,7 @@ BACKEND_URL=$(gcloud run services describe eventku-api \
 
 info "Backend URL: $BACKEND_URL"
 
-# ── 9. Build & Deploy Frontend ──────────────────────────────────────────────
+# ── 10. Build & Deploy Frontend ──────────────────────────────────────────────
 info "Building and deploying frontend..."
 
 gcloud builds submit . \
@@ -221,7 +248,7 @@ gcloud builds submit . \
 
 info "Frontend deployed!"
 
-# ── 10. Get Frontend URL ─────────────────────────────────────────────────────
+# ── 11. Get Frontend URL ─────────────────────────────────────────────────────
 FRONTEND_URL=$(gcloud run services describe eventku-web \
   --region=$REGION \
   --project=$PROJECT_ID \

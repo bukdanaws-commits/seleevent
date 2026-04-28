@@ -13,8 +13,16 @@ import (
         "gorm.io/gorm/logger"
 )
 
+const (
+        maxRetries     = 10
+        initialBackoff = 2 * time.Second
+        maxBackoff     = 30 * time.Second
+)
+
 // Connect initializes the PostgreSQL database connection.
 // Supports TCP connections (local development) and Unix socket (Cloud Run + Cloud SQL).
+// In production (APP_ENV=production), retries with exponential backoff to handle
+// transient Cloud SQL connection issues during Cloud Run cold starts.
 func Connect(cfg config.Config) (*gorm.DB, error) {
         var dsn string
         sslmode := cfg.DB.SSLMode
@@ -28,17 +36,44 @@ func Connect(cfg config.Config) (*gorm.DB, error) {
                         "host=%s user=%s password=%s dbname=%s sslmode=%s",
                         cfg.DB.Host, cfg.DB.User, cfg.DB.Password, cfg.DB.Name, sslmode,
                 )
+                log.Printf("Database: connecting via Unix socket at %s", cfg.DB.Host)
         } else {
                 // TCP connection (local development)
                 dsn = fmt.Sprintf(
                         "host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
                         cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Password, cfg.DB.Name, sslmode,
                 )
+                log.Printf("Database: connecting via TCP to %s:%s", cfg.DB.Host, cfg.DB.Port)
         }
 
-        db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+        // ── Retry logic for production (Cloud Run cold starts) ──────────────
+        retries := maxRetries
+        if cfg.App.Env != "production" {
+                retries = 1 // No retry in development
+        }
+
+        var db *gorm.DB
+        var err error
+
+        for attempt := 1; attempt <= retries; attempt++ {
+                db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+                if err == nil {
+                        break
+                }
+
+                if attempt < retries {
+                        backoff := initialBackoff * time.Duration(1<<(attempt-1))
+                        if backoff > maxBackoff {
+                                backoff = maxBackoff
+                        }
+                        log.Printf("Database: connection attempt %d/%d failed: %v", attempt, retries, err)
+                        log.Printf("Database: retrying in %v...", backoff)
+                        time.Sleep(backoff)
+                }
+        }
+
         if err != nil {
-                return nil, fmt.Errorf("failed to connect to PostgreSQL: %w", err)
+                return nil, fmt.Errorf("failed to connect to PostgreSQL after %d attempts: %w", retries, err)
         }
 
         // Configure connection pool for PostgreSQL
