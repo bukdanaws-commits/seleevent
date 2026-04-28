@@ -1,0 +1,8 @@
+node_modules/
+.next/
+.git/
+*.db
+*.sqlite
+dev.log
+tmp/
+mini-services/

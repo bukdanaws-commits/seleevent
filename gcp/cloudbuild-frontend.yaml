@@ -46,9 +46,9 @@ steps:
     args:
       - 'build'
       - '-t'
-      - '$_REGION-docker.pkg.dev/$PROJECT_ID/docker/eventku-web:$COMMIT_SHA'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-web:$COMMIT_SHA'
       - '-t'
-      - '$_REGION-docker.pkg.dev/$PROJECT_ID/docker/eventku-web:latest'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-web:latest'
       - '-f'
       - 'Dockerfile.frontend'
       - '--build-arg=NEXT_PUBLIC_API_URL=$_BACKEND_URL'
@@ -62,7 +62,7 @@ steps:
   # ── Push to Artifact Registry ─────────────────────────────────────────────
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-image'
-    args: ['push', '--all-tags', '$_REGION-docker.pkg.dev/$PROJECT_ID/docker/eventku-web']
+    args: ['push', '--all-tags', '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-web']
     waitFor: ['build-image']
 
   # ── Deploy to Cloud Run ───────────────────────────────────────────────────
@@ -73,7 +73,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'eventku-web'
-      - '--image=$_REGION-docker.pkg.dev/$PROJECT_ID/docker/eventku-web:$COMMIT_SHA'
+      - '--image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-web:$COMMIT_SHA'
       - '--region=$_REGION'
       - '--platform=managed'
       - '--cpu=1'
@@ -91,6 +91,7 @@ steps:
 substitutions:
   _REGION: asia-southeast2
   _PROJECT_ID: eventku-494416
+  _REPO: eventku
   _BACKEND_URL: https://eventku-api-xxxxx-xx.a.run.app
   _MIDTRANS_CLIENT_KEY: Mid-client-sJtCsptoF8hoaFgN
 

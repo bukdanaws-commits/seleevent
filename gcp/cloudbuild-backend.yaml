@@ -37,19 +37,19 @@ steps:
     args:
       - 'build'
       - '-t'
-      - '$_REGION-docker.pkg.dev/$PROJECT_ID/docker/eventku-api:$COMMIT_SHA'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-api:$COMMIT_SHA'
       - '-t'
-      - '$_REGION-docker.pkg.dev/$PROJECT_ID/docker/eventku-api:latest'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-api:latest'
       - '-f'
       - 'backend/Dockerfile'
-      - '--build-arg=BINARY_PATH=backend/eventku-api'
+      - '--build-arg=BINARY_PATH=/workspace/backend/eventku-api'
       - '.'
     waitFor: ['build-binary']
 
   # ── Push to Artifact Registry ─────────────────────────────────────────────
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-image'
-    args: ['push', '--all-tags', '$_REGION-docker.pkg.dev/$PROJECT_ID/docker/eventku-api']
+    args: ['push', '--all-tags', '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-api']
     waitFor: ['build-image']
 
   # ── Deploy to Cloud Run ───────────────────────────────────────────────────
@@ -60,7 +60,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'eventku-api'
-      - '--image=$_REGION-docker.pkg.dev/$PROJECT_ID/docker/eventku-api:$COMMIT_SHA'
+      - '--image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-api:$COMMIT_SHA'
       - '--region=$_REGION'
       - '--platform=managed'
       - '--cpu=2'
@@ -83,6 +83,7 @@ substitutions:
   _REGION: asia-southeast2
   _PROJECT_ID: eventku-494416
   _INSTANCE_NAME: eventku
+  _REPO: eventku
 
 # ── Build options ───────────────────────────────────────────────────────────
 options:

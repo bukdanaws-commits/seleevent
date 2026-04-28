@@ -43,7 +43,7 @@ RUN if [ -z "$BINARY_PATH" ]; then \
         -o /seleevent-api \
         ./cmd/server; \
     else \
-      cp /workspace/eventku-api /seleevent-api; \
+      cp ${BINARY_PATH} /seleevent-api; \
     fi
 
 # ── Runtime stage ───────────────────────────────────────────────────────────
