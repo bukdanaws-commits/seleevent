@@ -232,20 +232,39 @@ for SECRET in database-password jwt-secret refresh-jwt-secret \
   echo "  ✅  $SECRET"
 done
 
-# ── Step 10: Create Cloud Storage bucket ────────────────
+# ── Step 10: Configure Cloud Storage bucket ─────────────
 echo ""
-echo "▸ [10/11] Creating Cloud Storage bucket..."
-BUCKET_NAME="${PROJECT_ID}-assets"
-gsutil mb -p "$PROJECT_ID" -l "$REGION" "gs://${BUCKET_NAME}" 2>/dev/null || \
-  echo "  ℹ️  Bucket already exists, skipping creation."
+echo "▸ [10/11] Configuring Cloud Storage bucket..."
+BUCKET_NAME="eventku_data"
+
+# Check if bucket exists
+if gsutil ls -p "$PROJECT_ID" "gs://${BUCKET_NAME}" > /dev/null 2>&1; then
+  echo "  ✅  Bucket '$BUCKET_NAME' already exists — configuring."
+else
+  echo "  ⚠️  Bucket '$BUCKET_NAME' not found. Creating in asia (multi-region)..."
+  gsutil mb -p "$PROJECT_ID" -l asia "gs://${BUCKET_NAME}"
+fi
 
 # Create folder structure
 gsutil cp /dev/null "gs://${BUCKET_NAME}/qr-codes/.keep" 2>/dev/null || true
 gsutil cp /dev/null "gs://${BUCKET_NAME}/event-images/.keep" 2>/dev/null || true
 gsutil cp /dev/null "gs://${BUCKET_NAME}/exports/.keep" 2>/dev/null || true
+echo "  ✅  Folder structure: qr-codes/, event-images/, exports/"
 
 # Make bucket publicly readable (for QR codes, event images)
-gsutil iam ch allUsers:objectViewer "gs://${BUCKET_NAME}" 2>/dev/null || true
+if gsutil iam ch allUsers:objectViewer "gs://${BUCKET_NAME}" 2>/dev/null; then
+  echo "  ✅  Public read access enabled"
+else
+  echo "  ⚠️  Could not set public access. Run manually:"
+  echo "     gsutil iam ch allUsers:objectViewer gs://${BUCKET_NAME}"
+fi
+
+# Configure CORS for frontend access
+echo '[{"origin":["*"],"method":["GET","HEAD","OPTIONS"],"responseHeader":["Content-Type","Access-Control-Allow-Origin","Content-Length"],"maxAgeSeconds":3600}]' > /tmp/cors.json
+gsutil cors set /tmp/cors.json "gs://${BUCKET_NAME}" 2>/dev/null || \
+  echo "  ⚠️  Could not set CORS. Run manually: gsutil cors set /tmp/cors.json gs://${BUCKET_NAME}"
+echo "  ✅  CORS configured"
+
 echo "  ✅  gs://${BUCKET_NAME}"
 
 # ── Step 11: Create Artifact Registry + Cloud Build perms ─
@@ -296,8 +315,11 @@ echo "  │  Connection:  $PROJECT_ID:$REGION:$INSTANCE_NAME"
 echo "  └─────────────────────────────────────────────────┘"
 echo ""
 echo "  ┌─ Cloud Storage ────────────────────────────────┐"
-echo "  │  Bucket:      gs://${BUCKET_NAME}"
+echo "  │  Bucket:      gs://eventku_data"
+echo "  │  Location:    asia (multi-region)"
 echo "  │  Folders:     qr-codes/, event-images/, exports/"
+echo "  │  Public:      allUsers:objectViewer"
+echo "  │  CORS:        Enabled (GET, HEAD, OPTIONS)"
 echo "  └─────────────────────────────────────────────────┘"
 echo ""
 echo "  ┌─ Artifact Registry ────────────────────────────┐"

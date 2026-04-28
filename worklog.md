@@ -111,3 +111,27 @@ Stage Summary:
 - Secrets: 8 total (was 4) — all checked in CI/CD scripts
 - Cloud SQL: existing instance detected, not recreated
 - No more hardcoded secrets in any script
+
+---
+Task ID: gcp-bucket-fix
+Agent: Main Agent
+Task: Align GCS bucket config with existing bucket `eventku_data` (asia multi-region)
+
+Work Log:
+- Analyzed existing GCS bucket: eventku_data, asia (multi-region), not public, no CORS
+- Updated setup.sh: BUCKET_NAME changed from `${PROJECT_ID}-assets` → `eventku_data`
+- Updated setup.sh: Detect existing bucket → configure instead of create
+- Updated setup.sh: Added CORS configuration via gsutil cors set
+- Updated setup.sh: Added public access + folder structure setup
+- Updated terraform/main.tf: bucket name → eventku_data, location → ASIA
+- Updated terraform/main.tf: Added STORAGE_BUCKET_NAME env var to Cloud Run
+- Updated cloudbuild-backend.yaml: Added STORAGE_BUCKET_NAME=eventku_data to env vars
+- Updated .env + .env.example: Added STORAGE_BUCKET_NAME=eventku_data
+- Updated backend/internal/config/config.go: Added StorageConfig struct + STORAGE_BUCKET_NAME binding
+- Updated backend/internal/config/config.go: Added missing _PATH overrides for GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, MIDTRANS_MERCHANT_ID, MIDTRANS_CLIENT_KEY
+
+Stage Summary:
+- Bucket `eventku_data` used consistently across all files
+- setup.sh detects existing bucket and configures (public access, CORS, folders)
+- Backend config.go now reads STORAGE_BUCKET_NAME
+- All 7 Cloud Run secrets now have _PATH fallback in config.go

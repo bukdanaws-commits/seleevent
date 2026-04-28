@@ -141,8 +141,8 @@ resource "google_sql_user" "default" {
 # ─── Cloud Storage ───────────────────────────────────────────────────────────
 
 resource "google_storage_bucket" "assets" {
-  name          = "${var.project_id}-assets"
-  location      = var.region
+  name          = "eventku_data"
+  location      = "ASIA"
   force_destroy = true
 
   uniform_bucket_level_access = true
@@ -396,6 +396,10 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "MIDTRANS_IS_SANDBOX"
         value = "true"
+      }
+      env {
+        name  = "STORAGE_BUCKET_NAME"
+        value = "eventku_data"
       }
 
       # Secrets from Secret Manager (mounted as env vars)
