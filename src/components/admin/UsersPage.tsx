@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { cn, formatRupiah, formatDateTimeShort } from '@/lib/utils';
 import { useAdminUsers } from '@/hooks/use-api';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { IAdminUser, UserStatus } from '@/lib/types';
 
 import {
   Card,
@@ -64,19 +65,6 @@ import {
 
 type RoleFilter = 'all' | 'SUPER_ADMIN' | 'ORGANIZER' | 'PARTICIPANT' | 'suspended';
 
-interface AdminUser {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  role: string;
-  status: 'active' | 'suspended' | 'banned';
-  totalOrders: number;
-  totalSpent: number;
-  lastLogin: string;
-  createdAt: string;
-}
-
 const ROLE_CONFIG: Record<string, { label: string; color: string; bgColor: string; icon: React.ElementType }> = {
   SUPER_ADMIN: {
     label: 'Super Admin',
@@ -122,7 +110,7 @@ export function UsersPage() {
   const [activeTab, setActiveTab] = useState<RoleFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleDialogOpen, setRoleDialogOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [selectedUser, setSelectedUser] = useState<IAdminUser | null>(null);
   const [newRole, setNewRole] = useState<string>('');
 
   const { data: usersData, isLoading, error } = useAdminUsers();
@@ -135,12 +123,12 @@ export function UsersPage() {
       email: String(u.email || ''),
       phone: String(u.phone || '—'),
       role: String(u.role || 'PARTICIPANT'),
-      status: (u.status === 'suspended' || u.status === 'banned' ? u.status : 'active') as AdminUser['status'],
+      status: (u.status === 'suspended' || u.status === 'banned' ? u.status : 'active') as UserStatus,
       totalOrders: Number(u.totalOrders || 0),
       totalSpent: Number(u.totalSpent || 0),
-      lastLogin: String(u.lastLogin || u.updatedAt || ''),
+      lastLoginAt: String(u.lastLoginAt || u.updatedAt || ''),
       createdAt: String(u.createdAt || ''),
-    })) as AdminUser[];
+    })) as IAdminUser[];
   }, [usersData]);
 
   // Stats
@@ -180,7 +168,7 @@ export function UsersPage() {
     }
   };
 
-  const handleRoleChange = (user: AdminUser) => {
+  const handleRoleChange = (user: IAdminUser) => {
     setSelectedUser(user);
     setNewRole(user.role);
     setRoleDialogOpen(true);
@@ -193,11 +181,11 @@ export function UsersPage() {
     }
   };
 
-  const handleSuspend = (user: AdminUser) => {
+  const handleSuspend = (user: IAdminUser) => {
     toast.warning(`User ${user.name} telah di-suspend`);
   };
 
-  const handleBan = (user: AdminUser) => {
+  const handleBan = (user: IAdminUser) => {
     toast.error(`User ${user.name} telah di-ban`);
   };
 
@@ -524,7 +512,7 @@ export function UsersPage() {
                         <TableCell className="hidden xl:table-cell">
                           <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                             <Clock className="w-3 h-3 text-muted-foreground/50 shrink-0" />
-                            {formatDateTimeStr(user.lastLogin)}
+                            {formatDateTimeStr(user.lastLoginAt)}
                           </div>
                         </TableCell>
 

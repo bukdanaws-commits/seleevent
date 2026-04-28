@@ -44,33 +44,16 @@ import {
 import { cn } from '@/lib/utils';
 import { useAdminGateMonitoring } from '@/hooks/use-api';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { IGateStats, ICheckinLog } from '@/lib/types';
 
-// ─── LOCAL TYPES ──────────────────────────────────────────────────────────────
+// ─── CONSTANTS ────────────────────────────────────────────────────────────
 
-type GateStats = {
-  gateId: string;
-  gateName: string;
-  capacity: number;
-  totalIn: number;
-  totalOut: number;
-  currentInside: number;
-  ratePerMinute: number;
-};
-
-type CheckinLog = {
-  id: string;
-  ticketCode: string;
-  userName: string;
-  ticketType: string;
-  action: 'IN' | 'OUT';
-  gateName: string;
-  scannedBy: string;
-  timestamp: string;
-};
+/** Venue max capacity — GBK Madya Stadium */
+const MAX_VENUE_CAPACITY = 30000;
 
 // ─── GATE STAT CARD ──────────────────────────────────────────────────────
 
-function GateStatCard({ gate }: { gate: GateStats }) {
+function GateStatCard({ gate }: { gate: IGateStats }) {
   const gateColors: Record<string, string> = {
     'Gate A': '#00A39D',
     'Gate B': '#00BFB8',
@@ -100,7 +83,7 @@ function GateStatCard({ gate }: { gate: GateStats }) {
           </Badge>
         </div>
         <CardDescription className="text-muted-foreground text-xs">
-          Capacity: {gate.capacity.toLocaleString('id-ID')}/min
+          Rate: {gate.ratePerMinute}/min
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -143,39 +126,39 @@ function GateStatCard({ gate }: { gate: GateStats }) {
 
 // ─── CHECK-IN LOG ROW ────────────────────────────────────────────────────
 
-function CheckinLogRow({ log }: { log: CheckinLog }) {
+function CheckinLogRow({ log }: { log: ICheckinLog }) {
   return (
     <TableRow className="border-b border-[rgba(0,163,157,0.08)] hover:bg-[rgba(0,163,157,0.04)]">
       <TableCell className="font-mono text-xs text-muted-foreground">
         {log.ticketCode}
       </TableCell>
       <TableCell className="text-sm text-white font-medium">
-        {log.userName}
+        {log.attendeeName}
       </TableCell>
       <TableCell>
         <Badge
           variant="outline"
           className="text-[10px] border-[rgba(0,163,157,0.3)] text-[#7FB3AE]"
         >
-          {log.ticketType}
+          {log.ticketTypeName}
         </Badge>
       </TableCell>
       <TableCell>
         <Badge
           className={cn(
             'text-[10px] font-bold',
-            log.action === 'IN'
+            log.action === 'entry'
               ? 'bg-green-500/20 text-green-400 border border-green-500/30'
               : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
           )}
         >
-          {log.action === 'IN' ? '↓ MASUK' : '↑ KELUAR'}
+          {log.action === 'entry' ? '↓ MASUK' : '↑ KELUAR'}
         </Badge>
       </TableCell>
       <TableCell className="text-xs text-white">{log.gateName}</TableCell>
-      <TableCell className="text-xs text-muted-foreground">{log.scannedBy}</TableCell>
+      <TableCell className="text-xs text-muted-foreground">{log.staffName}</TableCell>
       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-        {format(new Date(log.timestamp), 'HH:mm:ss')}
+        {format(new Date(log.scannedAt), 'HH:mm:ss')}
       </TableCell>
     </TableRow>
   );
@@ -187,14 +170,14 @@ export function GateMonitoringPage() {
   const { data, isLoading, error } = useAdminGateMonitoring();
   const logContainerRef = useRef<HTMLDivElement>(null);
 
-  const gateStats: GateStats[] = (data as any)?.gateStats ?? [];
-  const checkinLogs: CheckinLog[] = (data as any)?.checkinLogs ?? [];
-  const hourlySales: { hour: string; sales: number }[] = (data as any)?.hourlySales ?? [];
+  const gateStats: IGateStats[] = (data as { gateStats?: IGateStats[] } | undefined)?.gateStats ?? [];
+  const checkinLogs: ICheckinLog[] = (data as { checkinLogs?: ICheckinLog[] } | undefined)?.checkinLogs ?? [];
+  const hourlySales: { hour: string; sales: number }[] = (data as { hourlySales?: { hour: string; sales: number }[] } | undefined)?.hourlySales ?? [];
 
   const totalInside = gateStats.reduce((sum, g) => sum + g.currentInside, 0);
   const totalIn = gateStats.reduce((sum, g) => sum + g.totalIn, 0);
   const totalOut = gateStats.reduce((sum, g) => sum + g.totalOut, 0);
-  const maxCapacity = 18800;
+  const maxCapacity = MAX_VENUE_CAPACITY;
   const occupancyPct = Math.round((totalInside / maxCapacity) * 100);
   const latestLogs = checkinLogs.slice(0, 20);
 

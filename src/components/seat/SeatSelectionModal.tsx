@@ -70,22 +70,22 @@ export function SeatSelectionModal({
   }, [config])
 
   // Determine which mode to show
-  const mode: SeatSelectionMode = config?.seatSelectionMode || 'seat_selection'
+  const mode: SeatSelectionMode = config?.seatSelectionMode || 'seatSelection'
   const showChoice = mode === 'both'
-  const showSeatMap = mode === 'seat_selection' || (mode === 'both' && !showChoice)
-  const [selectedMode, setSelectedMode] = useState<'seat_selection' | 'auto_assign'>('seat_selection')
+  const showSeatMap = mode === 'seatSelection' || (mode === 'both' && !showChoice)
+  const [selectedMode, setSelectedMode] = useState<'seatSelection' | 'autoAssign'>('seatSelection')
 
-  // When mode is 'both', default to seat_selection view
-  const [viewMode, setViewMode] = useState<'seat_selection' | 'auto_assign'>(
-    mode === 'auto_assign' ? 'auto_assign' : 'seat_selection'
+  // When mode is 'both', default to seatSelection view
+  const [viewMode, setViewMode] = useState<'seatSelection' | 'autoAssign'>(
+    mode === 'autoAssign' ? 'autoAssign' : 'seatSelection'
   )
 
   // Reset view when modal opens
   const handleOpenChange = (open: boolean) => {
     if (open) {
       setConfirmedSeat(null)
-      setViewMode(mode === 'auto_assign' ? 'auto_assign' : 'seat_selection')
-      setSelectedMode('seat_selection')
+      setViewMode(mode === 'autoAssign' ? 'autoAssign' : 'seatSelection')
+      setSelectedMode('seatSelection')
     }
     onOpenChange(open)
   }
@@ -110,8 +110,8 @@ export function SeatSelectionModal({
   }
 
   // ─── Auto-assign direct mode (no seat map at all) ──────────────────────
-  // When mode === 'auto_assign', directly show AutoAssignModal
-  if (config?.seatSelectionMode === 'auto_assign') {
+  // When mode === 'autoAssign', directly show AutoAssignModal
+  if (config?.seatSelectionMode === 'autoAssign') {
     return (
       <AutoAssignModal
         open={open}
@@ -152,24 +152,24 @@ export function SeatSelectionModal({
               <div className="flex gap-2 mt-3">
                 <Button
                   size="sm"
-                  variant={viewMode === 'seat_selection' ? 'default' : 'outline'}
+                  variant={viewMode === 'seatSelection' ? 'default' : 'outline'}
                   className={cn(
                     'flex-1 gap-1.5 text-xs',
-                    viewMode === 'seat_selection' && 'bg-primary text-primary-foreground'
+                    viewMode === 'seatSelection' && 'bg-primary text-primary-foreground'
                   )}
-                  onClick={() => setViewMode('seat_selection')}
+                  onClick={() => setViewMode('seatSelection')}
                 >
                   <Armchair className="h-3.5 w-3.5" />
                   Pilih Sendiri
                 </Button>
                 <Button
                   size="sm"
-                  variant={viewMode === 'auto_assign' ? 'default' : 'outline'}
+                  variant={viewMode === 'autoAssign' ? 'default' : 'outline'}
                   className={cn(
                     'flex-1 gap-1.5 text-xs',
-                    viewMode === 'auto_assign' && 'bg-primary text-primary-foreground'
+                    viewMode === 'autoAssign' && 'bg-primary text-primary-foreground'
                   )}
-                  onClick={() => setViewMode('auto_assign')}
+                  onClick={() => setViewMode('autoAssign')}
                 >
                   <Zap className="h-3.5 w-3.5" />
                   Auto Assign
@@ -198,7 +198,7 @@ export function SeatSelectionModal({
           </div>
 
           {/* Content */}
-          {viewMode === 'auto_assign' && mode === 'both' ? (
+          {viewMode === 'autoAssign' && mode === 'both' ? (
             // ─── Auto-assign view (embedded in dialog) ───────────────────
             <div className="flex-1 flex items-center justify-center p-8">
               <div className="text-center space-y-6 max-w-sm">

@@ -41,7 +41,7 @@ type TicketRecord = {
   attendeeName: string
   ticketTypeName: string
   zone: string
-  status: 'active' | 'redeemed' | 'inside_venue' | 'cancelled'
+  status: 'active' | 'redeemed' | 'inside' | 'cancelled'
   wristbandCode: string | null
   redeemedAt: string | null
 }
@@ -52,7 +52,7 @@ function getStatusBadge(status: TicketRecord['status']) {
       return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Aktif</Badge>
     case 'redeemed':
       return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">Diredeem</Badge>
-    case 'inside_venue':
+    case 'inside':
       return <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100">Di Dalam Venue</Badge>
     case 'cancelled':
       return <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Dibatalkan</Badge>
@@ -63,7 +63,7 @@ const ITEMS_PER_PAGE = 15
 
 export function RedeemHistoryPage() {
   const { data: redemptionsData, isLoading, error } = useOrganizerRedemptions('')
-  const mockTickets: TicketRecord[] = (redemptionsData as any)?.data ?? (redemptionsData as any) ?? []
+  const mockTickets: TicketRecord[] = (redemptionsData as { data?: TicketRecord[] } | undefined)?.data ?? (Array.isArray(redemptionsData) ? redemptionsData as TicketRecord[] : [])
 
   const [ticketTypeFilter, setTicketTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -72,7 +72,7 @@ export function RedeemHistoryPage() {
   // Base data: tickets that have been redeemed or are inside venue
   const historyData = useMemo(() => {
     return mockTickets.filter(
-      (t) => t.status === 'redeemed' || t.status === 'inside_venue'
+      (t) => t.status === 'redeemed' || t.status === 'inside'
     )
   }, [mockTickets])
 
@@ -158,7 +158,7 @@ export function RedeemHistoryPage() {
               <SelectContent>
                 <SelectItem value="all">Semua Status</SelectItem>
                 <SelectItem value="redeemed">Diredeem</SelectItem>
-                <SelectItem value="inside_venue">Di Dalam Venue</SelectItem>
+                <SelectItem value="inside">Di Dalam Venue</SelectItem>
               </SelectContent>
             </Select>
           </div>

@@ -82,7 +82,7 @@ export default function CheckoutPage() {
   const event = (eventData as { event?: IEvent } | null)?.event ?? null;
 
   // Derive event ID from fetched event or fallback
-  const eventId = event?.id || "event-jkt-001";
+  const eventId = event?.id || "f47ac10b-58cc-4372-a567-0e02b2c3d479";
   const { data: ticketTypesData, isLoading: ticketTypesLoading } = useTicketTypes(eventId);
   const ticketTypes: ITicketType[] = Array.isArray(ticketTypesData) ? ticketTypesData : [];
 

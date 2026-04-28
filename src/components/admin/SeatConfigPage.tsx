@@ -163,9 +163,9 @@ export function SeatConfigPage() {
                             <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                               {getZoneTypeLabel(config.zoneType)}
                             </Badge>
-                            <Badge variant={config.seatSelectionMode === 'auto_assign' ? 'secondary' : 'outline'} className={cn(
+                            <Badge variant={config.seatSelectionMode === 'autoAssign' ? 'secondary' : 'outline'} className={cn(
                               'text-[10px] px-1.5 py-0',
-                              config.seatSelectionMode === 'seat_selection' && 'border-primary/30 text-primary',
+                              config.seatSelectionMode === 'seatSelection' && 'border-primary/30 text-primary',
                               config.seatSelectionMode === 'both' && 'border-gold/30 text-gold',
                             )}>
                               {getSelectionModeLabel(config.seatSelectionMode)}
@@ -293,9 +293,9 @@ export function SeatConfigPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Mode Kursi</p>
-                  <Badge variant={currentConfig.seatSelectionMode === 'auto_assign' ? 'secondary' : 'outline'} className={cn(
+                  <Badge variant={currentConfig.seatSelectionMode === 'autoAssign' ? 'secondary' : 'outline'} className={cn(
                     'text-xs',
-                    currentConfig.seatSelectionMode === 'seat_selection' && 'border-primary/30 text-primary',
+                    currentConfig.seatSelectionMode === 'seatSelection' && 'border-primary/30 text-primary',
                     currentConfig.seatSelectionMode === 'both' && 'border-gold/30 text-gold',
                   )}>
                     {getSelectionModeLabel(currentConfig.seatSelectionMode)}
@@ -433,9 +433,9 @@ export function SeatConfigPage() {
                           <td className="py-2.5 font-medium">{config.emoji} {config.tierName}</td>
                           <td className="py-2.5 text-muted-foreground">{getZoneTypeLabel(config.zoneType)}</td>
                           <td className="py-2.5">
-                            <Badge variant={config.seatSelectionMode === 'auto_assign' ? 'secondary' : 'outline'} className={cn(
+                            <Badge variant={config.seatSelectionMode === 'autoAssign' ? 'secondary' : 'outline'} className={cn(
                               'text-[10px]',
-                              config.seatSelectionMode === 'seat_selection' && 'border-primary/30 text-primary',
+                              config.seatSelectionMode === 'seatSelection' && 'border-primary/30 text-primary',
                               config.seatSelectionMode === 'both' && 'border-gold/30 text-gold',
                             )}>
                               {getSelectionModeLabel(config.seatSelectionMode)}
@@ -629,14 +629,14 @@ export function SeatConfigPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="seat_selection">Pilih Sendiri (Seat Map)</SelectItem>
-                    <SelectItem value="auto_assign">Auto Assign (Sistem Pilih)</SelectItem>
+                    <SelectItem value="seatSelection">Pilih Sendiri (Seat Map)</SelectItem>
+                    <SelectItem value="autoAssign">Auto Assign (Sistem Pilih)</SelectItem>
                     <SelectItem value="both">Hybrid (User Pilih / Auto)</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-[10px] text-muted-foreground">
-                  {editingConfig.seatSelectionMode === 'seat_selection' ? 'User membuka seat map dan memilih kursi sendiri'
-                    : editingConfig.seatSelectionMode === 'auto_assign' ? 'Sistem otomatis assign kursi terbaik'
+                  {editingConfig.seatSelectionMode === 'seatSelection' ? 'User membuka seat map dan memilih kursi sendiri'
+                    : editingConfig.seatSelectionMode === 'autoAssign' ? 'Sistem otomatis assign kursi terbaik'
                     : 'User bisa memilih sendiri atau serahkan ke sistem'}
                 </p>
               </div>

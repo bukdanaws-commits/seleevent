@@ -47,7 +47,7 @@ import { usePageStore } from '@/lib/page-store'
 import { GoogleLoginModal } from '@/components/GoogleLoginModal'
 import { SeatSelectionModal } from '@/components/seat/SeatSelectionModal'
 import { AutoAssignModal } from '@/components/seat/AutoAssignModal'
-import { defaultSeatConfigs, getSelectionModeLabel } from '@/lib/seat-data'
+import { defaultSeatConfigs, getSelectionModeLabel, TIER_IDS } from '@/lib/seat-data'
 import dynamic from 'next/dynamic'
 
 // ─── Lazy imports for page views ────────────────────────────
@@ -74,7 +74,7 @@ export const WRISTBAND_COLORS: Record<string, { color: string; hex: string; labe
 // ─── FALLBACK STATIC DATA ──────────────────────────────────
 // Used when the backend API is not available
 const FALLBACK_EVENT = {
-  id: 'event-jkt-001',
+  id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
   slug: 'sheila-on7-jakarta',
   title: 'Sheila On 7 — JAKARTA',
   subtitle: 'Melompat Lebih Tinggi Tour 2026',
@@ -90,7 +90,7 @@ const FALLBACK_EVENT = {
 
 const FALLBACK_TICKET_TYPES = [
   {
-    id: 'tt-vvip',
+    id: 'a1b2c3d4-e5f6-7890-abcd-000000000001',
     name: 'VVIP PIT',
     description: 'Standing paling depan — barisan depan panggung',
     price: 3500000,
@@ -110,7 +110,7 @@ const FALLBACK_TICKET_TYPES = [
     ],
   },
   {
-    id: 'tt-vip',
+    id: 'a1b2c3d4-e5f6-7890-abcd-000000000002',
     name: 'VIP ZONE',
     description: 'Standing VIP — di belakang VVIP Pit',
     price: 2800000,
@@ -127,7 +127,7 @@ const FALLBACK_TICKET_TYPES = [
     ],
   },
   {
-    id: 'tt-festival',
+    id: 'a1b2c3d4-e5f6-7890-abcd-000000000003',
     name: 'FESTIVAL',
     description: 'General admission standing — bebas pilih posisi',
     price: 2200000,
@@ -142,7 +142,7 @@ const FALLBACK_TICKET_TYPES = [
     ],
   },
   {
-    id: 'tt-cat1',
+    id: 'a1b2c3d4-e5f6-7890-abcd-000000000004',
     name: 'CAT 1',
     description: 'Tribun Bawah Kiri — kursi bernomor',
     price: 1750000,
@@ -158,7 +158,7 @@ const FALLBACK_TICKET_TYPES = [
     ],
   },
   {
-    id: 'tt-cat2',
+    id: 'a1b2c3d4-e5f6-7890-abcd-000000000005',
     name: 'CAT 2',
     description: 'Tribun Tengah Kiri — kursi bernomor',
     price: 1400000,
@@ -173,7 +173,7 @@ const FALLBACK_TICKET_TYPES = [
     ],
   },
   {
-    id: 'tt-cat3',
+    id: 'a1b2c3d4-e5f6-7890-abcd-000000000006',
     name: 'CAT 3',
     description: 'Tribun Tengah Kanan — kursi bernomor',
     price: 1100000,
@@ -188,7 +188,7 @@ const FALLBACK_TICKET_TYPES = [
     ],
   },
   {
-    id: 'tt-cat4',
+    id: 'a1b2c3d4-e5f6-7890-abcd-000000000007',
     name: 'CAT 4',
     description: 'Tribun Atas Kanan — kursi bernomor',
     price: 850000,
@@ -203,7 +203,7 @@ const FALLBACK_TICKET_TYPES = [
     ],
   },
   {
-    id: 'tt-cat5',
+    id: 'a1b2c3d4-e5f6-7890-abcd-000000000008',
     name: 'CAT 5',
     description: 'Tribun Ujung Belakang — kursi bernomor',
     price: 550000,
@@ -218,7 +218,7 @@ const FALLBACK_TICKET_TYPES = [
     ],
   },
   {
-    id: 'tt-cat6',
+    id: 'a1b2c3d4-e5f6-7890-abcd-000000000009',
     name: 'CAT 6',
     description: 'Tribun Belakang — kursi bernomor',
     price: 350000,
@@ -728,7 +728,7 @@ function TicketsFloorSection({ ticketTypes, onBuy }: { ticketTypes: TicketTypeDi
 
         <div className="grid gap-5 md:grid-cols-3 max-w-4xl mx-auto">
           {floorTiers.map((tier, idx) => {
-            const isVVIP = tier.id === 'tt-vvip'
+            const isVVIP = tier.id === TIER_IDS.VVIP
             const pct = getQuotaPercentage(tier)
             const available = getAvailableQuota(tier)
             const wristband = WRISTBAND_COLORS[tier.name]
@@ -905,7 +905,7 @@ function TicketsTribunSection({ ticketTypes, onBuy }: { ticketTypes: TicketTypeD
                       onBuy(tier)
                     }}
                   >
-                    {available === 0 ? 'Habis' : getSelectionModeLabel(defaultSeatConfigs.find(c => c.tierId === tier.id)?.seatSelectionMode || 'seat_selection')}
+                    {available === 0 ? 'Habis' : getSelectionModeLabel(defaultSeatConfigs.find(c => c.tierId === tier.id)?.seatSelectionMode || 'seatSelection')}
                   </Button>
                 </CardContent>
               </Card>
@@ -1073,7 +1073,7 @@ function HighlightsSection() {
 // ─────────────────────────────────────────────────────────
 function VVIPShowcaseSection({ ticketTypes, onBuy }: { ticketTypes: TicketTypeDisplay[]; onBuy: (tt: TicketTypeDisplay) => void }) {
   const { ref, inView } = useInView()
-  const vvip = ticketTypes.find(t => t.id === 'tt-vvip')
+  const vvip = ticketTypes.find(t => t.id === TIER_IDS.VVIP)
   if (!vvip) return null
 
   const pct = getQuotaPercentage(vvip)
@@ -1423,11 +1423,11 @@ export default function HomePage() {
     }
 
     const config = defaultSeatConfigs.find(c => c.tierId === tt.id)
-    const mode = config?.seatSelectionMode || 'seat_selection'
+    const mode = config?.seatSelectionMode || 'seatSelection'
 
     setSelectedTier(tt)
 
-    if (mode === 'auto_assign') {
+    if (mode === 'autoAssign') {
       setAutoAssignModalOpen(true)
     } else {
       setSeatModalOpen(true)

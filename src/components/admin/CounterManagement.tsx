@@ -5,22 +5,11 @@ import { cn } from '@/lib/utils';
 import { useAdminCounters, useAdminStaff } from '@/hooks/use-api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import type { ICounterDashboard } from '@/lib/types';
 
-// ─── LOCAL TYPES & HELPERS ────────────────────────────────────────────────────
+// ─── HELPERS ────────────────────────────────────────────────────────────────
 
-type Counter = {
-  id: string;
-  name: string;
-  location: string;
-  capacity: number;
-  status: 'active' | 'inactive' | 'closed';
-  staffCount: number;
-  redeemedToday: number;
-  openAt: string | null;
-  closeAt: string | null;
-};
-
-function getCounterStatusBadge(status: Counter['status']) {
+function getCounterStatusBadge(status: ICounterDashboard['status']) {
   switch (status) {
     case 'active': return { label: 'Aktif', color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' };
     case 'inactive': return { label: 'Nonaktif', color: 'text-gray-400 border-gray-500/30 bg-gray-500/10' };
@@ -93,17 +82,24 @@ export function CounterManagement() {
   const { data: apiCountersData, isLoading, error } = useAdminCounters();
   const { data: apiStaff } = useAdminStaff();
 
-  const apiCounters: Counter[] = (apiCountersData as any)?.data ?? (apiCountersData as any) ?? [];
-  const apiRedemptionConfig: RedemptionConfig = (apiCountersData as any)?.redemptionConfig ?? { startDate: '', endDate: '', startTime: '', endTime: '' };
-  const staffUsers: any[] = (apiStaff as any)?.data ?? (apiStaff as any) ?? [];
+  const apiCounters: ICounterDashboard[] = (() => {
+    const d = apiCountersData as { data?: ICounterDashboard[] } | ICounterDashboard[] | undefined;
+    return Array.isArray(d) ? d : (d?.data ?? []);
+  })();
+  const apiRedemptionConfig: RedemptionConfig = (apiCountersData as { redemptionConfig?: RedemptionConfig } | undefined)?.redemptionConfig ?? { startDate: '', endDate: '', startTime: '', endTime: '' };
+  const staffUsers: { id: string; name: string; role: string; status: string; assignedLocation?: string; shift?: string; totalScans?: number }[] = (() => {
+    const d = apiStaff as { data?: unknown[] } | unknown[] | undefined;
+    const arr = Array.isArray(d) ? d : ((d as { data?: unknown[] })?.data ?? []);
+    return arr as typeof staffUsers;
+  })();
 
-  const counters: Counter[] = apiCounters.length > 0 ? apiCounters : [];
+  const counters: ICounterDashboard[] = apiCounters.length > 0 ? apiCounters : [];
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [editCounter, setEditCounter] = useState<Counter | null>(null);
+  const [editCounter, setEditCounter] = useState<ICounterDashboard | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [staffDialogOpen, setStaffDialogOpen] = useState(false);
-  const [selectedCounter, setSelectedCounter] = useState<Counter | null>(null);
+  const [selectedCounter, setSelectedCounter] = useState<ICounterDashboard | null>(null);
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
 
   // Redemption config state
@@ -119,7 +115,7 @@ export function CounterManagement() {
 
   // Edit form
   const [editForm, setEditForm] = useState({
-    status: '' as Counter['status'],
+    status: '' as ICounterDashboard['status'],
     capacity: '0',
   });
 
@@ -153,7 +149,7 @@ export function CounterManagement() {
 
   // ── Helpers ──
   const getCounterStaff = (counterName: string) =>
-    staffUsers.filter((s: any) => s.role === 'COUNTER_STAFF' && s.assignedLocation === counterName);
+    staffUsers.filter((s) => s.role === 'COUNTER_STAFF' && s.assignedLocation === counterName);
 
   const handleAddCounter = () => {
     if (!addForm.name.trim() || !addForm.location.trim()) {
@@ -168,7 +164,7 @@ export function CounterManagement() {
   if (isLoading) return <div className="p-6 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-40 w-full" /></div>;
   if (error) return <div className="p-6 text-red-500">Failed to load data: {error.message}</div>;
 
-  const handleEditCounter = (counter: Counter) => {
+  const handleEditCounter = (counter: ICounterDashboard) => {
     setEditCounter(counter);
     setEditForm({
       status: counter.status,
@@ -430,7 +426,7 @@ export function CounterManagement() {
               <Label className="text-[#7FB3AE] text-sm">Status</Label>
               <Select
                 value={editForm.status}
-                onValueChange={(v) => setEditForm({ ...editForm, status: v as Counter['status'] })}
+                onValueChange={(v) => setEditForm({ ...editForm, status: v as ICounterDashboard['status'] })}
               >
                 <SelectTrigger className="bg-[#0A0F0E] border-[rgba(0,163,157,0.15)] text-white">
                   <SelectValue />
@@ -487,7 +483,7 @@ export function CounterManagement() {
               {(() => {
                 const staff = getCounterStaff(selectedCounter.name);
                 const available = staffUsers.filter(
-                  (s: any) =>
+                  (s) =>
                     s.role === 'COUNTER_STAFF' &&
                     s.status === 'active' &&
                     s.assignedLocation !== selectedCounter.name

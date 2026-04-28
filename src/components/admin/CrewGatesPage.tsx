@@ -5,8 +5,14 @@ import { cn, formatRupiah } from '@/lib/utils';
 import { useAdminCrewGates } from '@/hooks/use-api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import type { IGateDashboard } from '@/lib/types';
 
 // ─── LOCAL TYPES ───────────────────────────────────────────────────────────────
+
+/** Extends IGateDashboard with crew-specific fields from the API */
+type CrewGateConfig = IGateDashboard & {
+  currentScanner?: string | null;
+};
 
 type CrewMember = {
   id: string;
@@ -18,17 +24,6 @@ type CrewMember = {
   assignedStation: string | null;
   status: 'active' | 'inactive';
   lastActive: string;
-};
-
-type GateConfig = {
-  id: string;
-  name: string;
-  type: 'entry' | 'exit' | 'both';
-  location: string;
-  minAccessLevel: string;
-  capacityPerMinute: number;
-  currentScanner: string | null;
-  isActive: boolean;
 };
 
 import {
@@ -119,7 +114,7 @@ const roleConfig: Record<
 };
 
 const gateTypeConfig: Record<
-  GateConfig['type'],
+  CrewGateConfig['type'],
   { label: string; className: string; icon: React.ReactNode }
 > = {
   entry: {
@@ -151,32 +146,32 @@ interface ScannerDevice {
 
 const mockScannerDevices: ScannerDevice[] = [
   {
-    id: 'dev-001',
+    id: 'a1b2c3d4-e5f6-7890-abcd-scanner000001',
     name: 'Redeem Booth Alpha',
     type: 'redeem',
     status: 'online',
-    lastPing: '2025-05-24T18:10:00',
+    lastPing: '2026-04-25T18:10:00',
   },
   {
-    id: 'dev-002',
+    id: 'a1b2c3d4-e5f6-7890-abcd-scanner000002',
     name: 'Gate A Scanner',
     type: 'entry',
     status: 'online',
-    lastPing: '2025-05-24T18:09:30',
+    lastPing: '2026-04-25T18:09:30',
   },
   {
-    id: 'dev-003',
+    id: 'a1b2c3d4-e5f6-7890-abcd-scanner000003',
     name: 'Gate B Scanner',
     type: 'entry',
     status: 'online',
-    lastPing: '2025-05-24T18:10:15',
+    lastPing: '2026-04-25T18:10:15',
   },
   {
-    id: 'dev-004',
+    id: 'a1b2c3d4-e5f6-7890-abcd-scanner000004',
     name: 'Exit Main Scanner',
     type: 'exit',
     status: 'offline',
-    lastPing: '2025-05-24T16:00:00',
+    lastPing: '2026-04-25T16:00:00',
   },
 ];
 
@@ -203,8 +198,8 @@ const deviceTypeConfig: Record<
 export function CrewGatesPage() {
   const { data, isLoading, error } = useAdminCrewGates();
 
-  const crewMembers: CrewMember[] = (data as any)?.data ? (data as any).data.filter((c: any) => c.role) : (data as any)?.crew ?? [];
-  const gateConfigs: GateConfig[] = (data as any)?.data ? (data as any).data.filter((c: any) => c.type) : (data as any)?.gates ?? [];
+  const crewMembers: CrewMember[] = (data as { data?: CrewMember[] } | undefined)?.data?.filter((c: CrewMember) => c.role) ?? (data as { crew?: CrewMember[] } | undefined)?.crew ?? [];
+  const gateConfigs: CrewGateConfig[] = (data as { data?: CrewGateConfig[] } | undefined)?.data?.filter((c: CrewGateConfig) => c.type) ?? (data as { gates?: CrewGateConfig[] } | undefined)?.gates ?? [];
 
   // ── Crew State ──
   const [crewSearch, setCrewSearch] = useState('');
@@ -214,7 +209,7 @@ export function CrewGatesPage() {
 
   // ── Gate State ──
   const [gateToggles, setGateToggles] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(gateConfigs.map((g) => [g.id, g.isActive]))
+    () => Object.fromEntries(gateConfigs.map((g) => [g.id, g.status === 'active']))
   );
 
   // ── Crew stats ──
@@ -581,7 +576,7 @@ export function CrewGatesPage() {
                     <div className="flex items-center gap-2 text-sm">
                       <Activity className="w-3.5 h-3.5 text-[#7FB3AE] shrink-0" />
                       <span className="text-[#7FB3AE]">Capacity: </span>
-                      <span className="text-white font-medium">{gate.capacityPerMinute}/min</span>
+                      <span className="text-white font-medium">{gate.capacityPerMin}/min</span>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <ScanLine className="w-3.5 h-3.5 text-[#7FB3AE] shrink-0" />

@@ -5,25 +5,11 @@ import { cn, formatTime } from '@/lib/utils';
 import { useAdminGates, useAdminStaff } from '@/hooks/use-api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import type { IGateDashboard } from '@/lib/types';
 
-// ─── LOCAL TYPES & HELPERS ──────────────────────────────────────────────────
+// ─── HELPERS ──────────────────────────────────────────────────────────────
 
-type Gate = {
-  id: string;
-  name: string;
-  type: 'entry' | 'exit' | 'both';
-  location: string;
-  minAccessLevel: string;
-  capacityPerMin: number;
-  status: 'active' | 'inactive' | 'closed';
-  staffCount: number;
-  totalIn: number;
-  totalOut: number;
-  currentInside: number;
-  lastScan: string | null;
-};
-
-function getGateTypeBadge(type: Gate['type']) {
+function getGateTypeBadge(type: IGateDashboard['type']) {
   switch (type) {
     case 'entry': return { label: 'Masuk', color: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30' };
     case 'exit': return { label: 'Keluar', color: 'text-red-400 bg-red-500/15 border-red-500/30' };
@@ -31,7 +17,7 @@ function getGateTypeBadge(type: Gate['type']) {
   }
 }
 
-function getStatusBadgeColor(status: Gate['status']) {
+function getStatusBadgeColor(status: IGateDashboard['status']) {
   switch (status) {
     case 'active': return 'text-emerald-400 border-emerald-500/30';
     case 'inactive': return 'text-gray-400 border-gray-500/30';
@@ -86,20 +72,27 @@ import {
 export function GateManagement() {
   const { data: apiGates, isLoading, error } = useAdminGates();
   const { data: apiStaff } = useAdminStaff();
-  const gates: Gate[] = (apiGates as any)?.data ?? apiGates as any ?? [];
+  const gates: IGateDashboard[] = (() => {
+    const d = apiGates as { data?: IGateDashboard[] } | IGateDashboard[] | undefined;
+    return Array.isArray(d) ? d : (d?.data ?? []);
+  })();
 
-  const staffUsers: any[] = (apiStaff as any)?.data ?? apiStaff as any ?? [];
+  const staffUsers: { id: string; name: string; role: string; status: string; assignedLocation?: string; shift?: string; totalScans?: number }[] = (() => {
+    const d = apiStaff as { data?: unknown[] } | unknown[] | undefined;
+    const arr = Array.isArray(d) ? d : ((d as { data?: unknown[] })?.data ?? []);
+    return arr as typeof staffUsers;
+  })();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [staffDialogOpen, setStaffDialogOpen] = useState(false);
-  const [selectedGate, setSelectedGate] = useState<Gate | null>(null);
+  const [selectedGate, setSelectedGate] = useState<IGateDashboard | null>(null);
 
   // Add form
   const [addForm, setAddForm] = useState({
     name: '',
-    type: 'entry' as Gate['type'],
+    type: 'entry' as IGateDashboard['type'],
     location: '',
     minAccessLevel: 'FESTIVAL',
     capacityPerMin: '30',
@@ -107,8 +100,8 @@ export function GateManagement() {
 
   // Edit form
   const [editForm, setEditForm] = useState({
-    status: '' as Gate['status'],
-    type: '' as Gate['type'],
+    status: '' as IGateDashboard['status'],
+    type: '' as IGateDashboard['type'],
   });
 
   // ── Filtered data ──
@@ -141,15 +134,17 @@ export function GateManagement() {
 
   // ── Helpers ──
   const getGateStaff = (gateName: string) =>
-    staffUsers.filter((s: any) => s.role === 'GATE_STAFF' && s.assignedLocation === gateName);
+    staffUsers.filter((s) => s.role === 'GATE_STAFF' && s.assignedLocation === gateName);
 
   const handleAddGate = () => {
     if (!addForm.name.trim() || !addForm.location.trim()) {
       toast.error('Nama dan lokasi wajib diisi');
       return;
     }
-    const newGate: Gate = {
-      id: `gate-${String(gates.length + 1).padStart(2, '0')}`,
+    const newGate: IGateDashboard = {
+      id: crypto.randomUUID(),
+      tenantId: '',
+      eventId: '',
       name: addForm.name,
       type: addForm.type,
       location: addForm.location,
@@ -160,7 +155,9 @@ export function GateManagement() {
       totalIn: 0,
       totalOut: 0,
       currentInside: 0,
-      lastScan: null,
+      lastScan: undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
     setGates((prev) => [...prev, newGate]);
     setAddForm({ name: '', type: 'entry', location: '', minAccessLevel: 'FESTIVAL', capacityPerMin: '30' });
@@ -168,7 +165,7 @@ export function GateManagement() {
     toast.success(`Gate "${newGate.name}" berhasil ditambahkan`);
   };
 
-  const handleEditGate = (gate: Gate) => {
+  const handleEditGate = (gate: IGateDashboard) => {
     setSelectedGate(gate);
     setEditForm({ status: gate.status, type: gate.type });
     setEditDialogOpen(true);
@@ -404,7 +401,7 @@ export function GateManagement() {
               <Label className="text-[#7FB3AE] text-sm">Tipe Gate</Label>
               <Select
                 value={addForm.type}
-                onValueChange={(v) => setAddForm({ ...addForm, type: v as Gate['type'] })}
+                onValueChange={(v) => setAddForm({ ...addForm, type: v as IGateDashboard['type'] })}
               >
                 <SelectTrigger className="bg-[#0A0F0E] border-[rgba(0,163,157,0.15)] text-white">
                   <SelectValue />
@@ -490,7 +487,7 @@ export function GateManagement() {
               <Label className="text-[#7FB3AE] text-sm">Status</Label>
               <Select
                 value={editForm.status}
-                onValueChange={(v) => setEditForm({ ...editForm, status: v as Gate['status'] })}
+                onValueChange={(v) => setEditForm({ ...editForm, status: v as IGateDashboard['status'] })}
               >
                 <SelectTrigger className="bg-[#0A0F0E] border-[rgba(0,163,157,0.15)] text-white">
                   <SelectValue />
@@ -506,7 +503,7 @@ export function GateManagement() {
               <Label className="text-[#7FB3AE] text-sm">Tipe Gate</Label>
               <Select
                 value={editForm.type}
-                onValueChange={(v) => setEditForm({ ...editForm, type: v as Gate['type'] })}
+                onValueChange={(v) => setEditForm({ ...editForm, type: v as IGateDashboard['type'] })}
               >
                 <SelectTrigger className="bg-[#0A0F0E] border-[rgba(0,163,157,0.15)] text-white">
                   <SelectValue />
@@ -554,7 +551,7 @@ export function GateManagement() {
               {(() => {
                 const staff = getGateStaff(selectedGate.name);
                 const available = staffUsers.filter(
-                  (s: any) =>
+                  (s) =>
                     s.role === 'GATE_STAFF' &&
                     s.status === 'active' &&
                     s.assignedLocation !== selectedGate.name

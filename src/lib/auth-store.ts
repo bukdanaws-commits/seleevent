@@ -33,10 +33,27 @@ interface AuthState {
 
 // ─── ROLE-BASED MOCK USERS (DEV ONLY — for loginAsRole quick testing) ─────
 
+// Helper: generate a mock JWT-like token for dev role-based login
+function generateMockJWT(userId: string, role: string, typ: 'access' | 'refresh'): string {
+  const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+  const now = Math.floor(Date.now() / 1000)
+  const exp = typ === 'access' ? now + 900 : now + 604800 // 15 min access, 7 day refresh
+  const payload = btoa(JSON.stringify({
+    user_id: userId,
+    role,
+    typ,
+    iat: now,
+    exp,
+  }))
+  // Simulated base64url signature (44 chars to mimic HMAC-SHA256 output)
+  const signature = btoa(`${userId}-${role}-${typ}-${now}`).replace(/=+$/, '').padEnd(43, 'x')
+  return `${header}.${payload}.${signature}`
+}
+
 const MOCK_USERS_BY_ROLE: Record<UserRole, AuthUser> = {
   SUPER_ADMIN: {
-    id: 'user-superadmin',
-    googleId: '',
+    id: 'a1b2c3d4-e5f6-7890-abcd-000000000001',
+    googleId: 'google-superadmin',
     name: 'Bukdan Admin',
     email: 'bukdan@seleevent.id',
     avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Bukdan',
@@ -47,8 +64,8 @@ const MOCK_USERS_BY_ROLE: Record<UserRole, AuthUser> = {
     updatedAt: new Date().toISOString(),
   },
   ADMIN: {
-    id: 'user-admin',
-    googleId: '',
+    id: 'a1b2c3d4-e5f6-7890-abcd-000000000002',
+    googleId: 'google-admin',
     name: 'Rizky Pratama',
     email: 'rizky@seleevent.id',
     avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Rizky',
@@ -59,8 +76,8 @@ const MOCK_USERS_BY_ROLE: Record<UserRole, AuthUser> = {
     updatedAt: new Date().toISOString(),
   },
   ORGANIZER: {
-    id: 'user-organizer',
-    googleId: '',
+    id: 'a1b2c3d4-e5f6-7890-abcd-000000000003',
+    googleId: 'google-organizer',
     name: 'Andi Wijaya',
     email: 'andi.wijaya@gmail.com',
     avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Andi',
@@ -71,8 +88,8 @@ const MOCK_USERS_BY_ROLE: Record<UserRole, AuthUser> = {
     updatedAt: new Date().toISOString(),
   },
   COUNTER_STAFF: {
-    id: 'user-counter',
-    googleId: '',
+    id: 'a1b2c3d4-e5f6-7890-abcd-000000000004',
+    googleId: 'google-counter',
     name: 'Rina Wulandari',
     email: 'rina.w@gmail.com',
     avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Rina',
@@ -83,8 +100,8 @@ const MOCK_USERS_BY_ROLE: Record<UserRole, AuthUser> = {
     updatedAt: new Date().toISOString(),
   },
   GATE_STAFF: {
-    id: 'user-gate',
-    googleId: '',
+    id: 'a1b2c3d4-e5f6-7890-abcd-000000000005',
+    googleId: 'google-gate',
     name: 'Bayu Aditya',
     email: 'bayu.a@gmail.com',
     avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Bayu',
@@ -95,8 +112,8 @@ const MOCK_USERS_BY_ROLE: Record<UserRole, AuthUser> = {
     updatedAt: new Date().toISOString(),
   },
   PARTICIPANT: {
-    id: 'user-participant',
-    googleId: '',
+    id: 'a1b2c3d4-e5f6-7890-abcd-000000000006',
+    googleId: 'google-participant',
     name: 'Budi Santoso',
     email: 'budi.santoso@gmail.com',
     avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Budi',
@@ -245,9 +262,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true })
     await new Promise((resolve) => setTimeout(resolve, 500))
 
+    const mockUser = MOCK_USERS_BY_ROLE[role]
     const mockTokens = {
-      access: `mock_token_${role.toLowerCase()}_${Date.now()}`,
-      refresh: `mock_refresh_${role.toLowerCase()}_${Date.now()}`,
+      access: generateMockJWT(mockUser.id, role, 'access'),
+      refresh: generateMockJWT(mockUser.id, role, 'refresh'),
     }
 
     setTokens(mockTokens.access, mockTokens.refresh)
@@ -257,7 +275,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     sse.connect(mockTokens.access)
 
     set({
-      user: MOCK_USERS_BY_ROLE[role],
+      user: mockUser,
       isAuthenticated: true,
       isLoading: false,
       accessToken: mockTokens.access,

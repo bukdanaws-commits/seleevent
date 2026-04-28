@@ -30,7 +30,7 @@ type TicketRecord = {
   attendeeName: string
   ticketTypeName: string
   zone: string
-  status: 'active' | 'redeemed' | 'inside_venue' | 'cancelled'
+  status: 'active' | 'redeemed' | 'inside' | 'cancelled'
   wristbandCode: string | null
   redeemedBy: string | null
   redeemedAt: string | null
@@ -46,7 +46,7 @@ function getStatusBadge(status: TicketRecord['status']) {
       return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Aktif</Badge>
     case 'redeemed':
       return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">Diredeem</Badge>
-    case 'inside_venue':
+    case 'inside':
       return <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100">Di Dalam Venue</Badge>
     case 'cancelled':
       return <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Dibatalkan</Badge>
@@ -56,8 +56,8 @@ function getStatusBadge(status: TicketRecord['status']) {
 export function RedeemPage() {
   const { data: ticketsData, isLoading, error } = useOrganizerTickets('')
   const { data: inventoryData } = useOrganizerWristbandInventory('')
-  const mockTickets: TicketRecord[] = (ticketsData as any)?.data ?? (ticketsData as any) ?? []
-  const wristbandStats: any = inventoryData ?? { unused: 0, used: 0, total: 0 }
+  const mockTickets: TicketRecord[] = (ticketsData as { data?: TicketRecord[] } | undefined)?.data ?? (Array.isArray(ticketsData) ? ticketsData as TicketRecord[] : [])
+  const wristbandStats: { unused: number; used: number; total: number } = (inventoryData as { unused?: number; used?: number; total?: number } | undefined) ?? { unused: 0, used: 0, total: 0 }
 
   const [searchQuery, setSearchQuery] = useState('')
   const [foundTicket, setFoundTicket] = useState<TicketRecord | null>(null)
@@ -66,7 +66,7 @@ export function RedeemPage() {
 
   const todayStats = useMemo(() => {
     const redeemed = mockTickets.filter(
-      (t) => t.status === 'redeemed' || t.status === 'inside_venue'
+      (t) => t.status === 'redeemed' || t.status === 'inside'
     )
     return {
       totalRedeemed: redeemed.length,
@@ -97,7 +97,7 @@ export function RedeemPage() {
 
   const handleRedeem = () => {
     if (!foundTicket) return
-    if (foundTicket.status === 'redeemed' || foundTicket.status === 'inside_venue') {
+    if (foundTicket.status === 'redeemed' || foundTicket.status === 'inside') {
       toast.error('Tiket ini sudah diredeem sebelumnya')
       return
     }
@@ -226,7 +226,7 @@ export function RedeemPage() {
                 <Separator />
 
                 {/* Already redeemed warning */}
-                {(foundTicket.status === 'redeemed' || foundTicket.status === 'inside_venue') && (
+                {(foundTicket.status === 'redeemed' || foundTicket.status === 'inside') && (
                   <div className="flex items-center gap-3 p-4 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
                     <AlertTriangle className="h-6 w-6 text-red-500 shrink-0" />
                     <div>

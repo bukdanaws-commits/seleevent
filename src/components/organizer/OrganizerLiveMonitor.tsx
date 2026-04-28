@@ -70,7 +70,7 @@ export function OrganizerLiveMonitor() {
   const totalInside = (liveStats?.totalInside as number) ?? 0
   const totalOutside = (liveStats?.totalOutside as number) ?? 0
   const totalRedeemed = (liveStats?.totalRedeemed as number) ?? 0
-  const totalNotRedeemed = (liveStats?.totalNotRedeemed as number) ?? 0
+  const totalPending = (liveStats?.totalPending as number) ?? 0
   const totalReentries = (liveStats?.totalReentries as number) ?? 0
   const totalGateScans = (liveStats?.totalGateScans as number) ?? 0
   const activeGates = (liveStats?.activeGates as number) ?? 0
@@ -81,7 +81,7 @@ export function OrganizerLiveMonitor() {
     { label: 'Di Dalam', value: totalInside, color: 'text-emerald-400', bg: 'from-emerald-500/10 to-emerald-500/5', border: 'border-emerald-500/20', icon: LogIn },
     { label: 'Di Luar', value: totalOutside, color: 'text-blue-400', bg: 'from-blue-500/10 to-blue-500/5', border: 'border-blue-500/20', icon: LogOut },
     { label: 'Sudah Tukar', value: totalRedeemed, color: 'text-amber-400', bg: 'from-amber-500/10 to-amber-500/5', border: 'border-amber-500/20', icon: Watch },
-    { label: 'Belum Tukar', value: totalNotRedeemed, color: 'text-gray-400', bg: 'from-gray-500/10 to-gray-500/5', border: 'border-gray-500/20', icon: Users },
+    { label: 'Belum Tukar', value: totalPending, color: 'text-gray-400', bg: 'from-gray-500/10 to-gray-500/5', border: 'border-gray-500/20', icon: Users },
     { label: 'Re-entry', value: totalReentries, color: 'text-purple-400', bg: 'from-purple-500/10 to-purple-500/5', border: 'border-purple-500/20', icon: RefreshCw },
     { label: 'Gate Scans', value: totalGateScans, color: 'text-[#00A39D]', bg: 'from-[#00A39D]/10 to-[#00A39D]/5', border: 'border-[#00A39D]/20', icon: ScanLine },
   ]

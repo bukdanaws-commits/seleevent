@@ -56,29 +56,13 @@ import {
 import { cn } from '@/lib/utils';
 import { useAdminSettings } from '@/hooks/use-api';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { IAuditLogDisplay, ISystemHealth } from '@/lib/types';
 
 // ─── LOCAL TYPES ──────────────────────────────────────────────────────────────
 
-type AuditLog = {
-  id: string;
-  timestamp: string;
-  userName: string;
-  action: string;
-  module: string;
-  details: string;
-  ip: string;
-};
-
-type SystemHealth = {
-  cpuUsage: number;
-  memoryUsage: number;
-  diskUsage: number;
-  dbStatus: string;
-  queueDepth: number;
-  avgResponseTime: number;
-  errorRate: number;
-  uptime: string;
-};
+// AuditLog and SystemHealth now imported from @/lib/types
+// IAuditLogDisplay extends IAuditLog with userName
+// ISystemHealth includes cpuUsage?, memoryUsage?, diskUsage?, etc.
 
 // ─── RBAC MATRIX DATA ────────────────────────────────────────────────────
 
@@ -251,11 +235,20 @@ function HealthCard({
 export function SettingsPage() {
   const { data: settingsData, isLoading, error } = useAdminSettings();
 
-  const systemHealth: SystemHealth = (settingsData as any)?.systemHealth ?? {
-    cpuUsage: 0, memoryUsage: 0, diskUsage: 0, dbStatus: 'connected',
-    queueDepth: 0, avgResponseTime: 0, errorRate: 0, uptime: '0%',
+  const systemHealth: ISystemHealth = (settingsData as { systemHealth?: ISystemHealth } | undefined)?.systemHealth ?? {
+    dbStatus: 'connected',
+    activeConnections: 0,
+    sseConnections: 0,
+    tableCounts: {},
+    uptime: 0,
+    cpuUsage: 0,
+    memoryUsage: 0,
+    diskUsage: 0,
+    queueDepth: 0,
+    avgResponseTime: 0,
+    errorRate: 0,
   };
-  const mockAuditLogs: AuditLog[] = (settingsData as any)?.auditLogs ?? [];
+  const mockAuditLogs: IAuditLogDisplay[] = (settingsData as { auditLogs?: IAuditLogDisplay[] } | undefined)?.auditLogs ?? [];
 
   const [actionFilter, setActionFilter] = useState<string>('all');
   const [isEditing, setIsEditing] = useState(false);
@@ -452,21 +445,21 @@ export function SettingsPage() {
                 />
                 <HealthCard
                   title="CPU Usage"
-                  value={`${systemHealth.cpuUsage}%`}
+                  value={`${systemHealth.cpuUsage ?? 0}%`}
                   icon={Cpu}
-                  status={systemHealth.cpuUsage > 70 ? 'warning' : 'healthy'}
+                  status={(systemHealth.cpuUsage ?? 0) > 70 ? 'warning' : 'healthy'}
                 />
                 <HealthCard
                   title="Memory Usage"
-                  value={`${systemHealth.memoryUsage}%`}
+                  value={`${systemHealth.memoryUsage ?? 0}%`}
                   icon={Gauge}
-                  status={systemHealth.memoryUsage > 75 ? 'warning' : 'healthy'}
+                  status={(systemHealth.memoryUsage ?? 0) > 75 ? 'warning' : 'healthy'}
                 />
                 <HealthCard
                   title="Disk Usage"
-                  value={`${systemHealth.diskUsage}%`}
+                  value={`${systemHealth.diskUsage ?? 0}%`}
                   icon={HardDrive}
-                  status={systemHealth.diskUsage > 80 ? 'warning' : 'healthy'}
+                  status={(systemHealth.diskUsage ?? 0) > 80 ? 'warning' : 'healthy'}
                 />
                 <HealthCard
                   title="Database"
@@ -476,25 +469,25 @@ export function SettingsPage() {
                 />
                 <HealthCard
                   title="Queue Depth"
-                  value={`${systemHealth.queueDepth}`}
+                  value={`${systemHealth.queueDepth ?? 0}`}
                   icon={Activity}
-                  status={systemHealth.queueDepth > 10 ? 'warning' : 'healthy'}
+                  status={(systemHealth.queueDepth ?? 0) > 10 ? 'warning' : 'healthy'}
                 />
                 <HealthCard
                   title="Avg Response"
-                  value={`${systemHealth.avgResponseTime}ms`}
+                  value={`${systemHealth.avgResponseTime ?? 0}ms`}
                   icon={Timer}
-                  status={systemHealth.avgResponseTime > 300 ? 'warning' : 'healthy'}
+                  status={(systemHealth.avgResponseTime ?? 0) > 300 ? 'warning' : 'healthy'}
                 />
                 <HealthCard
                   title="Error Rate"
-                  value={`${systemHealth.errorRate}%`}
+                  value={`${systemHealth.errorRate ?? 0}%`}
                   icon={AlertTriangle}
-                  status={systemHealth.errorRate > 1 ? 'error' : systemHealth.errorRate > 0.5 ? 'warning' : 'healthy'}
+                  status={(systemHealth.errorRate ?? 0) > 1 ? 'error' : (systemHealth.errorRate ?? 0) > 0.5 ? 'warning' : 'healthy'}
                 />
                 <HealthCard
                   title="Uptime"
-                  value={systemHealth.uptime}
+                  value={systemHealth.uptime ? `${systemHealth.uptime}` : '0'}
                   icon={Clock}
                   status="healthy"
                 />
@@ -599,7 +592,7 @@ export function SettingsPage() {
                         className="border-b border-[rgba(0,163,157,0.08)] hover:bg-[rgba(0,163,157,0.04)]"
                       >
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                          {format(new Date(log.timestamp), 'dd MMM, HH:mm')}
+                          {format(new Date(log.createdAt), 'dd MMM, HH:mm')}
                         </TableCell>
                         <TableCell className="text-xs text-white font-medium whitespace-nowrap">
                           {log.userName}

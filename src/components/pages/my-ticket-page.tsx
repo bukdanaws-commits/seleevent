@@ -7,6 +7,7 @@ import { formatRupiah } from '@/lib/utils';
 import {
   useOrganizerWristbandGuide,
 } from '@/hooks/use-api';
+import type { ITicket, TicketStatus } from '@/lib/types';
 
 import {
   Card,
@@ -32,86 +33,121 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
 // ─── MOCK TICKET DATA FOR PARTICIPANT ────────────────────────────────────────
+// TODO: Connect to real API endpoint (e.g., GET /api/v1/tickets/my-tickets)
+// This page currently uses 100% hardcoded mock data with no API call.
 
-interface MyTicket {
-  ticketCode: string;
-  attendeeName: string;
-  ticketType: string;
+/** Extended ticket display type for the My Tickets page */
+interface MyTicketDisplay extends ITicket {
   tier: string;
   emoji: string;
   price: number;
-  seatLabel: string | null;
-  status: 'not_redeemed' | 'redeemed' | 'inside' | 'outside';
-  wristbandCode: string | null;
   wristbandColor: string | null;
   wristbandColorHex: string | null;
-  qrData: string;
   entryTime: string | null;
   entryGate: string | null;
 }
 
-const myTickets: MyTicket[] = [
+const myTickets: MyTicketDisplay[] = [
   {
+    id: 'c9a1d2e3-f4b5-6789-abcd-ef0123456789',
+    tenantId: '550e8400-e29b-41d4-a716-446655440000',
+    eventId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
     ticketCode: 'SHL-JKT-VVIPPIT-0001',
+    orderId: 'd7b2c3e4-f5a6-7890-bcde-f01234567890',
+    ticketTypeId: 'a1b2c3d4-e5f6-7890-abcd-000000000001',
     attendeeName: 'Budi Santoso',
-    ticketType: 'VVIP PIT',
+    attendeeEmail: 'budi.santoso@gmail.com',
+    seatLabel: 'V1',
+    qrData: 'SHL-JKT-VVIPPIT-0001',
+    status: 'inside',
+    wristbandCode: 'WB-00001',
+    eventTitle: 'Sheila On 7 — JAKARTA',
+    ticketTypeName: 'VVIP PIT',
+    createdAt: '2026-03-01T10:00:00Z',
+    updatedAt: '2026-04-25T16:30:00Z',
+    // Extended display fields
     tier: 'floor',
     emoji: '👑',
     price: 3500000,
-    seatLabel: 'V1',
-    status: 'inside',
-    wristbandCode: 'WB-00001',
     wristbandColor: 'Gold',
     wristbandColorHex: '#FFD700',
-    qrData: 'SHL-JKT-VVIPPIT-0001',
-    entryTime: '2025-05-24T16:30:00',
+    entryTime: '2026-04-25T16:30:00',
     entryGate: 'VIP Gate',
   },
   {
+    id: 'b8a0c1d2-e3f4-5678-9abc-def012345678',
+    tenantId: '550e8400-e29b-41d4-a716-446655440000',
+    eventId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
     ticketCode: 'SHL-JKT-VIPZONE-0002',
+    orderId: 'd7b2c3e4-f5a6-7890-bcde-f01234567890',
+    ticketTypeId: 'a1b2c3d4-e5f6-7890-abcd-000000000002',
     attendeeName: 'Budi Santoso',
-    ticketType: 'VIP ZONE',
+    attendeeEmail: 'budi.santoso@gmail.com',
+    seatLabel: 'P5',
+    qrData: 'SHL-JKT-VIPZONE-0002',
+    status: 'redeemed',
+    wristbandCode: 'WB-00002',
+    eventTitle: 'Sheila On 7 — JAKARTA',
+    ticketTypeName: 'VIP ZONE',
+    createdAt: '2026-03-01T10:00:00Z',
+    updatedAt: '2026-04-24T12:00:00Z',
+    // Extended display fields
     tier: 'floor',
     emoji: '⭐',
     price: 2800000,
-    seatLabel: 'P5',
-    status: 'redeemed',
-    wristbandCode: 'WB-00002',
     wristbandColor: 'Teal',
     wristbandColorHex: '#008080',
-    qrData: 'SHL-JKT-VIPZONE-0002',
     entryTime: null,
     entryGate: null,
   },
   {
+    id: 'a7900b1c-d2e3-4567-89ab-cdef01234567',
+    tenantId: '550e8400-e29b-41d4-a716-446655440000',
+    eventId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
     ticketCode: 'SHL-JKT-FESTIV-0003',
+    orderId: 'd7b2c3e4-f5a6-7890-bcde-f01234567890',
+    ticketTypeId: 'a1b2c3d4-e5f6-7890-abcd-000000000003',
     attendeeName: 'Budi Santoso',
-    ticketType: 'FESTIVAL',
+    attendeeEmail: 'budi.santoso@gmail.com',
+    seatLabel: undefined,
+    qrData: 'SHL-JKT-FESTIV-0003',
+    status: 'outside',
+    wristbandCode: 'WB-00003',
+    eventTitle: 'Sheila On 7 — JAKARTA',
+    ticketTypeName: 'FESTIVAL',
+    createdAt: '2026-03-01T10:00:00Z',
+    updatedAt: '2026-04-25T17:00:00Z',
+    // Extended display fields
     tier: 'floor',
     emoji: '🎵',
     price: 2200000,
-    seatLabel: null,
-    status: 'outside',
-    wristbandCode: 'WB-00003',
     wristbandColor: 'Orange',
     wristbandColorHex: '#FF6B35',
-    qrData: 'SHL-JKT-FESTIV-0003',
-    entryTime: '2025-05-24T16:45:00',
+    entryTime: '2026-04-25T16:45:00',
     entryGate: 'Gate A',
   },
   {
+    id: '9680f1a0-b1c2-3456-789a-bcdef0123456',
+    tenantId: '550e8400-e29b-41d4-a716-446655440000',
+    eventId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
     ticketCode: 'SHL-JKT-CAT10001',
+    orderId: 'd7b2c3e4-f5a6-7890-bcde-f01234567890',
+    ticketTypeId: 'a1b2c3d4-e5f6-7890-abcd-000000000004',
     attendeeName: 'Budi Santoso',
-    ticketType: 'CAT 1',
+    attendeeEmail: 'budi.santoso@gmail.com',
+    seatLabel: 'A5',
+    qrData: 'SHL-JKT-CAT10001',
+    status: 'pending',
+    eventTitle: 'Sheila On 7 — JAKARTA',
+    ticketTypeName: 'CAT 1',
+    createdAt: '2026-03-01T10:00:00Z',
+    updatedAt: '2026-03-01T10:00:00Z',
+    // Extended display fields
     tier: 'tribun',
     emoji: '🎟️',
     price: 1750000,
-    seatLabel: 'A5',
-    status: 'not_redeemed',
-    wristbandCode: null,
     wristbandColor: null,
     wristbandColorHex: null,
-    qrData: 'SHL-JKT-CAT10001',
     entryTime: null,
     entryGate: null,
   },
@@ -119,9 +155,9 @@ const myTickets: MyTicket[] = [
 
 // ─── STATUS CONFIG ────────────────────────────────────────────────────────────
 
-function getStatusConfig(status: MyTicket['status']) {
+function getStatusConfig(status: TicketStatus | MyTicketDisplay['status']) {
   switch (status) {
-    case 'not_redeemed':
+    case 'pending':
       return {
         label: 'Belum Tukar Gelang',
         color: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
@@ -169,7 +205,7 @@ export default function MyTicketPage() {
   })()
 
   const totalTickets = myTickets.length;
-  const redeemed = myTickets.filter((t) => t.status !== 'not_redeemed').length;
+  const redeemed = myTickets.filter((t) => t.status !== 'pending').length;
   const inside = myTickets.filter((t) => t.status === 'inside').length;
 
   return (
@@ -249,7 +285,7 @@ export default function MyTicketPage() {
                     <div className="flex items-center gap-3">
                       <span className="text-2xl">{ticket.emoji}</span>
                       <div>
-                        <h3 className="text-white font-bold text-base">{ticket.ticketType}</h3>
+                        <h3 className="text-white font-bold text-base">{ticket.ticketTypeName}</h3>
                         <div className="flex items-center gap-2 mt-1">
                           <Badge
                             variant="outline"
@@ -322,7 +358,7 @@ export default function MyTicketPage() {
                   {/* Status details */}
                   <div className={cn(
                     'p-3 rounded-lg border',
-                    ticket.status === 'not_redeemed'
+                    ticket.status === 'pending'
                       ? 'bg-gray-500/5 border-gray-500/10'
                       : ticket.status === 'redeemed'
                       ? 'bg-amber-500/5 border-amber-500/10'
@@ -330,7 +366,7 @@ export default function MyTicketPage() {
                       ? 'bg-emerald-500/5 border-emerald-500/10'
                       : 'bg-blue-500/5 border-blue-500/10'
                   )}>
-                    {ticket.status === 'not_redeemed' && (
+                    {ticket.status === 'pending' && (
                       <div className="flex items-start gap-2">
                         <AlertCircle className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
                         <div>

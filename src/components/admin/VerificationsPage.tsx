@@ -9,22 +9,15 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 
+import type { IVerificationItem } from '@/lib/types';
+
 // ─── LOCAL TYPES ──────────────────────────────────────────────────────────────
 
-type VerificationItem = {
-  id: string;
-  orderCode: string;
-  userName: string;
-  userEmail: string;
+/** Extends IVerificationItem with component-specific display fields */
+type VerificationItem = IVerificationItem & {
   ticketType: string;
   quantity: number;
-  totalAmount: number;
   paymentMethod: string;
-  status: 'queued' | 'in_review' | 'approved' | 'rejected' | 'expired';
-  slaMinutesLeft: number;
-  createdAt: string;
-  reviewedBy: string | null;
-  reviewedAt: string | null;
   rejectionReason: string | null;
 };
 
@@ -310,7 +303,7 @@ function VerificationDetailDialog({ item }: { item: VerificationItem }) {
           <div className="space-y-2">
             <DetailRow icon={<User className="w-3.5 h-3.5" />} label="Nama" value={item.userName} />
             <DetailRow icon={<Mail className="w-3.5 h-3.5" />} label="Email" value={item.userEmail} />
-            <DetailRow icon={<Calendar className="w-3.5 h-3.5" />} label="Tanggal Upload" value={formatDateTime(item.createdAt)} />
+            <DetailRow icon={<Calendar className="w-3.5 h-3.5" />} label="Tanggal Upload" value={formatDateTime(item.submittedAt)} />
             <DetailRow icon={<CreditCard className="w-3.5 h-3.5" />} label="Metode Bayar" value={item.paymentMethod} />
             <div className="flex items-center gap-3">
               <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -355,16 +348,19 @@ function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: strin
 
 export function VerificationsPage() {
   const { data: verificationsData, isLoading, error } = useAdminVerifications();
-  const verifications: any[] = (verificationsData as any)?.data ?? (verificationsData as any) ?? [];
+  const verifications: VerificationItem[] = (verificationsData as { data?: VerificationItem[] } | undefined)?.data ?? (Array.isArray(verificationsData) ? verificationsData as VerificationItem[] : []);
 
   // ── State ──
-  const pendingItems: VerificationItem[] = verifications.filter((v: any) => v.status === 'queued' || v.status === 'in_review');
+  const [pendingItems, setPendingItems] = useState<VerificationItem[]>([]);
+  React.useEffect(() => {
+    setPendingItems(verifications.filter((v) => v.status === 'queued' || v.status === 'in_review'));
+  }, [verifications]);
   const [historyFilter, setHistoryFilter] = useState<string>('all');
   const [historyPage, setHistoryPage] = useState(1);
 
   // ── History items (approved + rejected + expired) ──
   const historyItems = verifications.filter(
-    (v: any) => v.status === 'approved' || v.status === 'rejected' || v.status === 'expired'
+    (v) => v.status === 'approved' || v.status === 'rejected' || v.status === 'expired'
   );
 
   const filteredHistory = historyFilter === 'all' 
@@ -379,8 +375,8 @@ export function VerificationsPage() {
   );
 
   // ── Stats ──
-  const approvedToday = verifications.filter((v: any) => v.status === 'approved').length;
-  const rejectedToday = verifications.filter((v: any) => v.status === 'rejected').length;
+  const approvedToday = verifications.filter((v) => v.status === 'approved').length;
+  const rejectedToday = verifications.filter((v) => v.status === 'rejected').length;
 
   const stats = [
     {
@@ -566,7 +562,7 @@ export function VerificationsPage() {
                     <div className="flex items-center gap-2">
                       <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                       <span className="text-xs text-muted-foreground">
-                        Upload: {formatDateTime(item.createdAt)}
+                        Upload: {formatDateTime(item.submittedAt)}
                       </span>
                     </div>
 
@@ -704,7 +700,7 @@ export function VerificationsPage() {
                           </TableCell>
                           <TableCell className="px-4 py-3">
                             <p className="text-xs text-muted-foreground">
-                              {item.reviewedAt ? formatDateTime(item.reviewedAt) : formatDateTime(item.createdAt)}
+                              {item.reviewedAt ? formatDateTime(item.reviewedAt) : formatDateTime(item.submittedAt)}
                             </p>
                           </TableCell>
                           <TableCell className="px-4 py-3 max-w-[150px]">

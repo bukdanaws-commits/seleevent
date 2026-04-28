@@ -4,6 +4,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { cn, formatTime } from '@/lib/utils';
 import { useAdminLiveMonitor } from '@/hooks/use-api';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { IGateDashboard, ICheckinLog, IWristbandConfig, ILiveStats, ICounterDashboard } from '@/lib/types';
 
 import {
   Card,
@@ -33,29 +34,9 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-// ─── LOCAL TYPES & HELPERS ────────────────────────────────────────────────────
+// ─── LOCAL TYPES ────────────────────────────────────────────────────────────
 
-type LiveGate = {
-  id: string;
-  name: string;
-  type: 'entry' | 'exit' | 'both';
-  status: string;
-  totalIn: number;
-  totalOut: number;
-  lastScan: string | null;
-};
-
-type GateLog = {
-  id: string;
-  userName: string;
-  ticketCode: string;
-  action: 'IN' | 'OUT';
-  gateName: string;
-  staffName: string;
-  reentryCount: number;
-  timestamp: string;
-};
-
+/** Attendee status for live search — not in central types */
 type AttendeeStatus = {
   userName: string;
   ticketCode: string;
@@ -68,35 +49,14 @@ type AttendeeStatus = {
   gateUsed: string | null;
 };
 
-type LiveCounter = {
-  id: string;
-  name: string;
-  location: string;
-  status: string;
-  redeemedToday: number;
-  capacity: number;
+/** Extends ICheckinLog with live-monitor-specific fields */
+type LiveCheckinLog = ICheckinLog & {
+  reentryCount?: number;
 };
 
-type WristbandConfig = {
-  ticketTypeId: string;
-  ticketTypeName: string;
-  wristbandColor: string;
-  wristbandColorHex: string;
-  emoji: string;
-};
+// ─── HELPERS ────────────────────────────────────────────────────────────────
 
-type LiveStats = {
-  totalInside: number;
-  totalOutside: number;
-  totalRedeemed: number;
-  totalNotRedeemed: number;
-  totalReentries: number;
-  totalGateScans: number;
-  activeGates: number;
-  activeCounters: number;
-};
-
-function getGateTypeBadge(type: LiveGate['type']) {
+function getGateTypeBadge(type: IGateDashboard['type']) {
   switch (type) {
     case 'entry': return { label: 'Masuk', color: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30' };
     case 'exit': return { label: 'Keluar', color: 'text-red-400 bg-red-500/15 border-red-500/30' };
@@ -106,7 +66,7 @@ function getGateTypeBadge(type: LiveGate['type']) {
 
 function getAttendeeStatusBadge(status: string) {
   switch (status) {
-    case 'inside_venue': return { label: 'Di Dalam', color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' };
+    case 'inside': return { label: 'Di Dalam', color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' };
     case 'outside': return { label: 'Di Luar', color: 'text-blue-400 border-blue-500/30 bg-blue-500/10' };
     case 'redeemed': return { label: 'Sudah Tukar', color: 'text-amber-400 border-amber-500/30 bg-amber-500/10' };
     default: return { label: status, color: 'text-gray-400 border-gray-500/30 bg-gray-500/10' };
@@ -118,14 +78,16 @@ function getAttendeeStatusBadge(status: string) {
 export function LiveMonitor() {
   const { data, isLoading, error } = useAdminLiveMonitor();
 
-  const liveGates: LiveGate[] = (data as any)?.gates ?? [];
-  const gateLogs: GateLog[] = (data as any)?.logs ?? [];
-  const attendeeStatuses: AttendeeStatus[] = (data as any)?.attendees ?? [];
-  const liveCounters: LiveCounter[] = (data as any)?.counters ?? [];
-  const wristbandConfigs: WristbandConfig[] = (data as any)?.wristbandConfigs ?? [];
-  const liveStats: LiveStats = (data as any)?.stats ?? {
-    totalInside: 0, totalOutside: 0, totalRedeemed: 0, totalNotRedeemed: 0,
+  const liveGates: IGateDashboard[] = (data as { gates?: IGateDashboard[] } | undefined)?.gates ?? [];
+  const gateLogs: LiveCheckinLog[] = (data as { logs?: LiveCheckinLog[] } | undefined)?.logs ?? [];
+  const attendeeStatuses: AttendeeStatus[] = (data as { attendees?: AttendeeStatus[] } | undefined)?.attendees ?? [];
+  const liveCounters: ICounterDashboard[] = (data as { counters?: ICounterDashboard[] } | undefined)?.counters ?? [];
+  const wristbandConfigs: IWristbandConfig[] = (data as { wristbandConfigs?: IWristbandConfig[] } | undefined)?.wristbandConfigs ?? [];
+  const liveStats: ILiveStats = (data as { stats?: ILiveStats } | undefined)?.stats ?? {
+    totalInside: 0, totalOutside: 0, totalRedeemed: 0, totalPending: 0,
     totalReentries: 0, totalGateScans: 0, activeGates: 0, activeCounters: 0,
+    totalTicketsPaid: 0, totalExited: 0, totalCounterStaff: 0, totalGateStaff: 0,
+    occupancyRate: 0, totalRevenue: 0,
   };
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -155,7 +117,7 @@ export function LiveMonitor() {
     { label: 'Total Di Dalam', value: liveStats.totalInside, color: 'text-emerald-400', bg: 'from-emerald-500/10 to-emerald-500/5', border: 'border-emerald-500/20', icon: LogIn },
     { label: 'Total Di Luar', value: liveStats.totalOutside, color: 'text-blue-400', bg: 'from-blue-500/10 to-blue-500/5', border: 'border-blue-500/20', icon: LogOut },
     { label: 'Total Sudah Tukar', value: liveStats.totalRedeemed, color: 'text-amber-400', bg: 'from-amber-500/10 to-amber-500/5', border: 'border-amber-500/20', icon: Watch },
-    { label: 'Total Belum Tukar', value: liveStats.totalNotRedeemed, color: 'text-gray-400', bg: 'from-gray-500/10 to-gray-500/5', border: 'border-gray-500/20', icon: Users },
+    { label: 'Total Belum Tukar', value: liveStats.totalPending, color: 'text-gray-400', bg: 'from-gray-500/10 to-gray-500/5', border: 'border-gray-500/20', icon: Users },
     { label: 'Total Re-entry', value: liveStats.totalReentries, color: 'text-purple-400', bg: 'from-purple-500/10 to-purple-500/5', border: 'border-purple-500/20', icon: RefreshCw },
     { label: 'Gate Scans', value: liveStats.totalGateScans, color: 'text-[#00A39D]', bg: 'from-[#00A39D]/10 to-[#00A39D]/5', border: 'border-[#00A39D]/20', icon: ScanLine },
   ];
@@ -279,31 +241,31 @@ export function LiveMonitor() {
                     >
                       <div className={cn(
                         'w-8 h-8 rounded-full flex items-center justify-center shrink-0',
-                        log.action === 'IN'
+                        log.action === 'entry'
                           ? 'bg-emerald-500/10'
                           : 'bg-blue-500/10'
                       )}>
-                        {log.action === 'IN'
+                        {log.action === 'entry'
                           ? <ArrowRight className="w-4 h-4 text-emerald-400" />
                           : <ArrowLeft className="w-4 h-4 text-blue-400" />
                         }
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-white font-medium truncate">{log.userName}</span>
+                          <span className="text-sm text-white font-medium truncate">{log.attendeeName}</span>
                           <Badge variant="outline" className={cn(
                             'text-[9px] px-1.5 py-0 shrink-0',
-                            log.action === 'IN'
+                            log.action === 'entry'
                               ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                               : 'bg-blue-500/15 text-blue-400 border-blue-500/30'
                           )}>
-                            {log.action}
+                            {log.action === 'entry' ? 'IN' : 'OUT'}
                           </Badge>
-                          {log.reentryCount > 0 && (
+                          {(log as LiveCheckinLog).reentryCount ? (
                             <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-purple-500/15 text-purple-400 border-purple-500/30">
-                              Re-entry #{log.reentryCount}
+                              Re-entry #{(log as LiveCheckinLog).reentryCount}
                             </Badge>
-                          )}
+                          ) : null}
                         </div>
                         <div className="flex items-center gap-2 text-[10px] text-[#7FB3AE] mt-0.5">
                           <span className="font-mono">{log.ticketCode}</span>
@@ -315,7 +277,7 @@ export function LiveMonitor() {
                       </div>
                       <span className="text-[10px] text-[#7FB3AE] shrink-0 flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {formatTime(log.timestamp)}
+                        {formatTime(log.scannedAt)}
                       </span>
                     </div>
                   ))}

@@ -167,6 +167,83 @@ DESIGN DECISIONS:
 - AuditLog kept with BaseModelNoUpdate since it has no updated_at column (append-only)
 
 ---
+Task ID: 2-b (frontend)
+Agent: Seat Data Unification Agent
+Task: Fix seat-data.ts — Unify Seat Interface with ISeat from types.ts
+
+Work Log:
+- Read worklog.md for context (prior agents: Env Setup, Schema, Models, Types/Cleanup, Landing Page, Mock-Data Fix)
+- Read current seat-data.ts, types.ts (ISeat interface), and all 5 consuming component files
+
+CHANGES TO /home/z/my-project/src/lib/seat-data.ts (complete rewrite):
+
+1. REPLACED local `Seat` interface with ISeat-aligned types:
+   - Imported `ISeat` from `@/lib/types`
+   - Added `SeatDisplay` interface (id, section, row, number, label, status, tierId?, tierName?)
+   - Made `Seat` extend `SeatDisplay` with ISeat compatibility fields (tenantId?, eventId?, ticketTypeId?, createdAt?, updatedAt?) and legacy aliases (rowLabel, seatNumber, seatLabel, reservedAt?, reservedBy?, orderId?)
+   - Legacy aliases provide backward compatibility for components still using old field names
+
+2. ADDED TIER_IDS constant with proper UUID format:
+   - VVIP: a1b2c3d4-e5f6-7890-abcd-000000000001
+   - VIP: a1b2c3d4-e5f6-7890-abcd-000000000002
+   - FESTIVAL: a1b2c3d4-e5f6-7890-abcd-000000000003
+   - CAT1-CAT6: ...0004 through ...0009
+   - Added MOCK_TENANT_ID and MOCK_EVENT_ID constants
+
+3. FIXED SeatSelectionMode values — snake_case → camelCase:
+   - 'seat_selection' → 'seatSelection'
+   - 'auto_assign' → 'autoAssign'
+   - 'both' kept as-is
+
+4. FIXED defaultSeatConfigs:
+   - All tierId values replaced from kebab-case ('tt-vvip', etc.) to UUIDs (TIER_IDS.VVIP, etc.)
+   - seatSelectionMode values updated to camelCase
+   - Added CAT 6 entry (tierId: TIER_IDS.CAT6, prefix 'F', price 350000, autoAssign mode)
+
+5. FIXED generateSeats() and generateMockSeats():
+   - Now generate proper UUIDs via `uuid` package (imported `v4 as uuidv4`)
+   - Seat objects include ALL ISeat fields (id=UUID, tenantId, eventId, ticketTypeId, section, row, number, label, status, createdAt, updatedAt) PLUS SeatDisplay fields (tierId, tierName) PLUS legacy aliases (rowLabel, seatNumber, seatLabel)
+   - Fixed orderId in sold seats: was `ord- sold-${...}` (typo with space) → now `uuidv4()`
+   - Reserved seats get `reservedAt` timestamp
+   - Section field set to config.tierName for grouping
+
+6. ADDED SeatDisplay helper interface and conversion functions:
+   - `iSeatToSeatDisplay(seat: ISeat, tierName?)` → converts ISeat to SeatDisplay
+   - `iSeatToSeat(seat: ISeat, tierName?)` → converts ISeat to Seat with legacy aliases and status mapping (held→reserved, disabled→locked)
+
+7. UPDATED getSelectionModeLabel() — new camelCase cases
+
+CASCADING FIXES (consuming components updated for camelCase migration):
+
+- /home/z/my-project/src/app/page.tsx:
+  - FALLBACK_TICKET_TYPES IDs: 'tt-vvip' etc. → UUID format matching TIER_IDS
+  - 'seat_selection' → 'seatSelection', 'auto_assign' → 'autoAssign'
+
+- /home/z/my-project/src/components/seat/SeatSelectionModal.tsx:
+  - All string comparisons and useState type params: 'seat_selection' → 'seatSelection', 'auto_assign' → 'autoAssign'
+
+- /home/z/my-project/src/components/admin/SeatConfigPage.tsx:
+  - All string comparisons: 'seat_selection' → 'seatSelection', 'auto_assign' → 'autoAssign'
+  - SelectItem values updated to camelCase
+
+VERIFICATION:
+- ESLint: 0 errors
+- TypeScript: No new errors introduced (pre-existing errors in page.tsx unrelated to seat-data changes)
+- No remaining snake_case seat selection mode references in src/
+
+BACKWARD COMPATIBILITY:
+- `Seat` type still exports with `rowLabel`, `seatNumber`, `seatLabel` legacy aliases
+- `generateMockSeats()` returns objects with BOTH ISeat fields AND legacy aliases
+- Components using `seat.rowLabel` etc. continue to work
+- `SeatStatus` type kept as 'available' | 'reserved' | 'sold' | 'locked' (maps from ISeat status via iSeatToSeat)
+
+Files Modified:
+- /home/z/my-project/src/lib/seat-data.ts (complete rewrite)
+- /home/z/my-project/src/app/page.tsx (tier IDs + camelCase migration)
+- /home/z/my-project/src/components/seat/SeatSelectionModal.tsx (camelCase migration)
+- /home/z/my-project/src/components/admin/SeatConfigPage.tsx (camelCase migration)
+
+---
 Task ID: 2-b
 Agent: Bug Fix Agent
 Task: Fix 3 CRITICAL bugs in Go backend + refactor SSE Hub dependency injection
@@ -607,3 +684,260 @@ DATA VERIFICATION (SQLite row counts):
 
 Files Created:
 - /home/z/my-project/backend/cmd/seed/main.go
+
+---
+Task ID: 2-a
+Agent: Frontend Types Fix Agent
+Task: Fix Frontend Core Types (types.ts + api.ts)
+
+Work Log:
+
+TASK 1 — Updated /home/z/my-project/src/lib/types.ts:
+
+ENUM CHANGES:
+1. AttendeeStatus — Added 'pending' as alternative to 'not_redeemed' (backend may return either)
+   Before: 'not_redeemed' | 'redeemed' | 'inside' | 'outside' | 'exited'
+   After:  'pending' | 'not_redeemed' | 'redeemed' | 'inside' | 'outside' | 'exited'
+
+2. TicketStatus — Verified correct, no changes needed (already matches backend PostgreSQL enum)
+
+EXISTING INTERFACE UPDATES:
+3. ILiveStats — Changed totalNotRedeemed → totalPending to match backend DTO response
+4. ISystemHealth — Expanded with 6 optional monitoring fields:
+   Added: cpuUsage?, memoryUsage?, diskUsage?, queueDepth?, avgResponseTime?, errorRate?
+
+NEW DTO INTERFACES ADDED (8 total, after ITenantUser):
+5. IGateDashboard — extends IGate with staffCount, totalIn, totalOut, currentInside, lastScan
+6. ICounterDashboard — extends ICounter with staffCount, redeemedToday
+7. IAdminUser — extends IUser with totalOrders, totalSpent
+8. IGateStats — standalone: gateId, gateName, ratePerMinute, totalIn, totalOut, currentInside
+9. ICheckinLog — standalone: id, gateId, gateName, ticketCode, attendeeName, ticketTypeName, action, scannedAt, staffName
+10. IVerificationItem — standalone: id, orderCode, userId, userName, userEmail, totalAmount, status (5-value enum), submittedAt, reviewedBy, reviewedAt, slaMinutesLeft
+11. IWristbandConfig — standalone: ticketTypeId, ticketTypeName, wristbandColor, wristbandColorHex, emoji
+12. IAuditLogDisplay — extends IAuditLog with userName
+
+IPAGINATION VERIFIED:
+- Already uses camelCase (perPage, totalPages) — no changes needed
+
+TASK 2 — Updated /home/z/my-project/src/lib/api.ts:
+
+APIFETCH PAGINATION NORMALIZATION:
+- Replaced simple pass-through `json.pagination || json.meta` with explicit normalization
+- Now reads from `json.meta || json.pagination` (prefers new meta format)
+- Normalizes to camelCase IPagination with snake_case fallbacks:
+  - total: rawMeta.total ?? rawMeta.total_count ?? 0
+  - page: rawMeta.page ?? rawMeta.current_page ?? 1
+  - perPage: rawMeta.perPage ?? rawMeta.per_page ?? 20
+  - totalPages: rawMeta.totalPages ?? rawMeta.total_pages ?? 1
+- PaginatedData<T> interface already uses IPagination (camelCase) — no changes needed
+
+TASK 3 — Updated consuming components for totalPending rename:
+- /home/z/my-project/src/components/admin/LiveMonitor.tsx:
+  - LiveStats type: totalNotRedeemed → totalPending
+  - Default fallback: totalNotRedeemed → totalPending
+  - Display: liveStats.totalNotRedeemed → liveStats.totalPending
+- /home/z/my-project/src/components/organizer/OrganizerLiveMonitor.tsx:
+  - Variable: totalNotRedeemed → totalPending
+  - Display reference: totalNotRedeemed → totalPending
+
+VERIFICATION:
+- ESLint passes clean with 0 errors
+- No remaining references to totalNotRedeemed in codebase
+
+FILES MODIFIED:
+- /home/z/my-project/src/lib/types.ts (4 changes: AttendeeStatus, ILiveStats, ISystemHealth, +8 DTOs)
+- /home/z/my-project/src/lib/api.ts (pagination normalization in apiFetch)
+- /home/z/my-project/src/components/admin/LiveMonitor.tsx (totalNotRedeemed → totalPending)
+- /home/z/my-project/src/components/organizer/OrganizerLiveMonitor.tsx (totalNotRedeemed → totalPending)
+
+---
+Task ID: 2-c
+Agent: Auth Store Fix Agent
+Task: Fix auth-store.ts — Replace Short Mock IDs with UUIDs
+
+Work Log:
+
+CHANGES MADE to /home/z/my-project/src/lib/auth-store.ts:
+
+1. Added `generateMockJWT()` helper function:
+   - Generates realistic JWT-like tokens (3 base64 segments separated by dots)
+   - Header: `{ alg: 'HS256', typ: 'JWT' }` (base64-encoded)
+   - Payload: `{ user_id, role, typ, iat, exp }` with proper expiry (15 min access, 7 day refresh)
+   - Signature: Simulated base64url signature mimicking HMAC-SHA256 output
+   - Replaces old `mock_token_${role.toLowerCase()}_${Date.now()}` format
+
+2. Replaced all short mock user IDs with proper UUIDs in MOCK_USERS_BY_ROLE:
+   - `'user-superadmin'` → `'a1b2c3d4-e5f6-7890-abcd-000000000001'`
+   - `'user-admin'` → `'a1b2c3d4-e5f6-7890-abcd-000000000002'`
+   - `'user-organizer'` → `'a1b2c3d4-e5f6-7890-abcd-000000000003'`
+   - `'user-counter'` → `'a1b2c3d4-e5f6-7890-abcd-000000000004'`
+   - `'user-gate'` → `'a1b2c3d4-e5f6-7890-abcd-000000000005'`
+   - `'user-participant'` → `'a1b2c3d4-e5f6-7890-abcd-000000000006'`
+
+3. Replaced empty googleId strings with backend-matching mock Google IDs:
+   - `''` → `'google-superadmin'` (SUPER_ADMIN)
+   - `''` → `'google-admin'` (ADMIN)
+   - `''` → `'google-organizer'` (ORGANIZER)
+   - `''` → `'google-counter'` (COUNTER_STAFF)
+   - `''` → `'google-gate'` (GATE_STAFF)
+   - `''` → `'google-participant'` (PARTICIPANT)
+
+4. Fixed `loginAsRole` function:
+   - Now uses `generateMockJWT(mockUser.id, role, 'access')` for access tokens
+   - Now uses `generateMockJWT(mockUser.id, role, 'refresh')` for refresh tokens
+   - Extracts `mockUser` from `MOCK_USERS_BY_ROLE[role]` before generating tokens
+   - UUID-based user IDs are embedded in the JWT payload
+
+VERIFICATION:
+- ESLint passes clean with 0 errors
+- Interface and store structure unchanged
+- Role-based logic preserved
+
+---
+Task ID: 3-b
+Agent: Public Pages Fix Agent
+Task: Fix Public Pages — UUID Format, Status Values, Mock Data
+
+Work Log:
+
+FILE 1 — /home/z/my-project/src/app/page.tsx (Landing Page):
+
+1. FALLBACK_EVENT ID: Changed `'event-jkt-001'` → `'f47ac10b-58cc-4372-a567-0e02b2c3d479'` (proper UUID format)
+
+2. FALLBACK_TICKET_TYPES IDs: Already using UUID format matching TIER_IDS (verified consistent with seat-data.ts)
+
+3. Imported TIER_IDS from `@/lib/seat-data` and fixed two broken VVIP comparisons:
+   - Line 731: `tier.id === 'tt-vvip'` → `tier.id === TIER_IDS.VVIP` (TicketsFloorSection isVVIP check — was never matching because IDs are UUIDs now)
+   - Line 1076: `t.id === 'tt-vvip'` → `t.id === TIER_IDS.VVIP` (VVIPShowcaseSection find — was never matching either)
+   These were stale references from before the seat-data.ts migration to UUIDs. They caused VVIP styling (gold borders, EXCLUSIVE badge) and VVIP Showcase section to not render.
+
+4. WRISTBAND_COLORS: Uses string display-name keys (not IDs), no UUID issue — ✅ already correct
+
+5. No `inside_venue`, `not_redeemed`, or `totalNotRedeemed` references in this file — ✅ already correct
+
+FILE 2 — /home/z/my-project/src/components/pages/my-ticket-page.tsx (My Tickets):
+
+1. Replaced local `MyTicket` interface with `MyTicketDisplay extends ITicket`:
+   - Imported `ITicket` and `TicketStatus` from `@/lib/types`
+   - MyTicketDisplay extends ITicket with additional display fields (tier, emoji, price, wristbandColor, wristbandColorHex, entryTime, entryGate)
+   - All mock ticket objects now include full ITicket fields (id as UUID, tenantId, eventId, orderId, ticketTypeId, attendeeEmail, eventTitle, ticketTypeName, createdAt, updatedAt)
+
+2. Fixed status values:
+   - `'not_redeemed'` → `'pending'` (matching TicketStatus type)
+   - `'inside'` — already correct (was not `'inside_venue'`)
+   - `'outside'` — already correct
+   - `'redeemed'` — already correct
+
+3. Updated all references to `'not_redeemed'`:
+   - getStatusConfig switch case: `case 'not_redeemed'` → `case 'pending'`
+   - Status config function parameter type: `MyTicket['status']` → `TicketStatus | MyTicketDisplay['status']`
+   - Filter expression: `t.status !== 'not_redeemed'` → `t.status !== 'pending'`
+   - CSS class conditional: `ticket.status === 'not_redeemed'` → `ticket.status === 'pending'` (2 occurrences)
+
+4. Fixed field name reference: `ticket.ticketType` → `ticket.ticketTypeName` (ITicket uses ticketTypeName)
+
+5. Updated mock data:
+   - All 4 ticket IDs are now proper UUIDs
+   - ticketTypeId values match TIER_IDS (VVIP=...0001, VIP=...0002, Festival=...0003, CAT1=...0004)
+   - Dates updated from 2025 to 2026
+   - wristbandCode format kept as-is (WB-00001, etc. — valid non-UUID format for display codes)
+
+6. Added TODO comment: "TODO: Connect to real API endpoint (e.g., GET /api/v1/tickets/my-tickets)"
+
+FILE 3 — /home/z/my-project/src/components/pages/checkout-page.tsx (Checkout):
+
+1. Fixed fallback event ID: `"event-jkt-001"` → `"f47ac10b-58cc-4372-a567-0e02b2c3d479"` (UUID format matching FALLBACK_EVENT in page.tsx)
+
+2. No other short IDs or snake_case field references found — all other IDs come from API-fetched data
+
+VERIFICATION:
+- ESLint passes clean with 0 errors
+- No remaining `event-jkt-001` references in src/
+- No remaining `tt-vvip`/`tt-vip`/`tt-festival` references in the 3 modified files
+- All `not_redeemed` references in my-ticket-page.tsx replaced with `pending`
+
+NOTE: `inside_venue` still exists in RedeemPage.tsx and RedeemHistoryPage.tsx (admin components) — outside scope of this task. Also `tt-vvip` in EventsPage.tsx:384 — outside scope.
+
+Files Modified:
+- /home/z/my-project/src/app/page.tsx (FALLBACK_EVENT UUID, TIER_IDS import, VVIP comparisons)
+- /home/z/my-project/src/components/pages/my-ticket-page.tsx (ITicket type, pending status, UUID IDs, TODO)
+- /home/z/my-project/src/components/pages/checkout-page.tsx (fallback event ID UUID)
+
+---
+Task ID: 3-a
+Agent: Admin Types Fix Agent
+Task: Fix Admin Page Components — Remove Local Types, Use Central + DTO
+
+Work Log:
+
+Analyzed all 9 admin component files to identify local type definitions, `as any` casts, incorrect field names, and status value mismatches against central types in @/lib/types.
+
+CHANGES MADE:
+
+1. GateManagement.tsx:
+   - Removed `(s: any)` casts in `getGateStaff()` filter and available staff filter
+   - Already using `IGateDashboard` from central types (no local Gate type existed)
+
+2. CounterManagement.tsx:
+   - Removed `(s: any)` casts in `getCounterStaff()` filter and available staff filter
+   - Already using `ICounterDashboard` from central types (no local Counter type existed)
+
+3. UsersPage.tsx:
+   - No changes needed — already using `IAdminUser` and `UserStatus` from @/lib/types
+
+4. CrewGatesPage.tsx:
+   - Verified `CrewGateConfig` already extends `IGateDashboard` (not a duplicate type)
+   - `capacityPerMin` already correct (not `capacityPerMinute`)
+   - Scanner device IDs already in UUID format (`a1b2c3d4-e5f6-7890-abcd-scanner000001` etc.)
+
+5. GateMonitoringPage.tsx:
+   - Replaced `VENUE_MAX_CAPACITY = 18800` with `MAX_VENUE_CAPACITY = 30000` (matches event capacity from schema/seeder)
+   - Updated reference `maxCapacity = VENUE_MAX_CAPACITY` → `maxCapacity = MAX_VENUE_CAPACITY`
+   - Already using `IGateStats` and `ICheckinLog` from central types
+
+6. LiveMonitor.tsx:
+   - Already using `IGateDashboard`, `ICheckinLog`, `IWristbandConfig`, `ILiveStats`, `ICounterDashboard` from central types
+   - Local `AttendeeStatus` type is component-specific (not the central enum), kept as-is
+   - Local `LiveCheckinLog` extends `ICheckinLog` with `reentryCount`, kept as extension type
+
+7. SettingsPage.tsx:
+   - Fixed `log.timestamp` → `log.createdAt` (IAuditLogDisplay has `createdAt`, not `timestamp`)
+   - Already using `IAuditLogDisplay` and `ISystemHealth` from central types
+
+8. VerificationsPage.tsx:
+   - Replaced standalone local `VerificationItem` type with `IVerificationItem` from @/lib/types
+   - New local type: `VerificationItem = IVerificationItem & { ticketType, quantity, paymentMethod, rejectionReason }` — extends central DTO with component-specific display fields
+   - Fixed `item.createdAt` → `item.submittedAt` (IVerificationItem uses `submittedAt`, not `createdAt`)
+   - Fixed undefined `setPendingItems` — converted `pendingItems` from derived const to `useState` with `useEffect` sync
+   - Removed `(v: any)` casts in filter functions
+   - Improved `verifications` type: `any[]` → `VerificationItem[]` with proper data unwrapping
+
+9. RedeemPage.tsx:
+   - Fixed `inside_venue` → `inside` in local `TicketRecord` status union type
+   - Fixed `inside_venue` → `inside` in `getStatusBadge()` switch case
+   - Fixed `inside_venue` → `inside` in `todayStats` filter, `handleRedeem()` check, and already-redeemed warning
+   - Removed `as any` casts: replaced with proper type narrowing `{ data?: TicketRecord[] }`
+   - Removed `wristbandStats: any` — typed as `{ unused: number; used: number; total: number }`
+
+10. RedeemHistoryPage.tsx:
+   - Fixed `inside_venue` → `inside` in local `TicketRecord` status union type
+   - Fixed `inside_venue` → `inside` in `getStatusBadge()` switch case
+   - Fixed `inside_venue` → `inside` in `historyData` filter
+   - Fixed `<SelectItem value="inside_venue">` → `<SelectItem value="inside">`
+   - Removed `as any` cast: replaced with proper type narrowing `{ data?: TicketRecord[] }`
+
+VERIFICATION:
+- ESLint passes clean with 0 errors
+- No remaining `inside_venue` references in src/
+- No remaining `capacityPerMinute` references (was already `capacityPerMin`)
+- No `dev-001` style short IDs (already UUID format)
+- All admin components now use central DTO types from @/lib/types
+
+FILES MODIFIED:
+- /home/z/my-project/src/components/admin/GateManagement.tsx (removed `as any` casts)
+- /home/z/my-project/src/components/admin/CounterManagement.tsx (removed `as any` casts)
+- /home/z/my-project/src/components/admin/GateMonitoringPage.tsx (MAX_VENUE_CAPACITY=30000)
+- /home/z/my-project/src/components/admin/SettingsPage.tsx (log.createdAt fix)
+- /home/z/my-project/src/components/admin/VerificationsPage.tsx (IVerificationItem + submittedAt + setPendingItems fix + remove `as any`)
+- /home/z/my-project/src/components/admin/RedeemPage.tsx (inside_venue→inside + remove `as any`)
+- /home/z/my-project/src/components/admin/RedeemHistoryPage.tsx (inside_venue→inside + remove `as any`)

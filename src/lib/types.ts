@@ -29,7 +29,7 @@ export type GateType = 'entry' | 'exit' | 'both'
 
 export type GateAction = 'entry' | 'exit' | 'denied' | 'error'
 
-export type AttendeeStatus = 'not_redeemed' | 'redeemed' | 'inside' | 'outside' | 'exited'
+export type AttendeeStatus = 'pending' | 'not_redeemed' | 'redeemed' | 'inside' | 'outside' | 'exited'
 
 export type ShiftType = 'pagi' | 'siang' | 'malam' | 'full'
 
@@ -353,6 +353,83 @@ export interface ITenantUser {
   joinedAt: string
 }
 
+// ─── DTOs (Data Transfer Objects) ─────────────────────────────────────────
+// Extended types for admin dashboard views that include aggregated data
+// not directly on the model but computed by the backend.
+
+/** Gate with live stats for dashboard */
+export interface IGateDashboard extends IGate {
+  staffCount: number
+  totalIn: number
+  totalOut: number
+  currentInside: number
+  lastScan?: string
+}
+
+/** Counter with live stats for dashboard */
+export interface ICounterDashboard extends ICounter {
+  staffCount: number
+  redeemedToday: number
+}
+
+/** User with aggregated order stats for admin user list */
+export interface IAdminUser extends IUser {
+  totalOrders: number
+  totalSpent: number
+}
+
+/** Gate stats for monitoring page */
+export interface IGateStats {
+  gateId: string
+  gateName: string
+  ratePerMinute: number
+  totalIn: number
+  totalOut: number
+  currentInside: number
+}
+
+/** Checkin log for gate monitoring */
+export interface ICheckinLog {
+  id: string
+  gateId: string
+  gateName: string
+  ticketCode: string
+  attendeeName: string
+  ticketTypeName: string
+  action: string
+  scannedAt: string
+  staffName: string
+}
+
+/** Verification item for admin verification queue */
+export interface IVerificationItem {
+  id: string
+  orderCode: string
+  userId: string
+  userName: string
+  userEmail: string
+  totalAmount: number
+  status: 'queued' | 'in_review' | 'approved' | 'rejected' | 'expired'
+  submittedAt: string
+  reviewedBy?: string
+  reviewedAt?: string
+  slaMinutesLeft: number
+}
+
+/** Wristband config for live monitor */
+export interface IWristbandConfig {
+  ticketTypeId: string
+  ticketTypeName: string
+  wristbandColor: string
+  wristbandColorHex: string
+  emoji: string
+}
+
+/** Audit log with user name for display */
+export interface IAuditLogDisplay extends IAuditLog {
+  userName: string
+}
+
 // ─── ORDER CREATION ────────────────────────────────────────────────────────
 
 export interface ICreateOrderRequest {
@@ -423,6 +500,12 @@ export interface ISystemHealth {
   sseConnections: number
   tableCounts: Record<string, number>
   uptime: number
+  cpuUsage?: number
+  memoryUsage?: number
+  diskUsage?: number
+  queueDepth?: number
+  avgResponseTime?: number
+  errorRate?: number
 }
 
 // ─── API REQUEST / RESPONSE DTOs ──────────────────────────────────────────
@@ -512,7 +595,7 @@ export interface ILiveStats {
   totalInside: number
   totalOutside: number
   totalExited: number
-  totalNotRedeemed: number
+  totalPending: number
   totalGateScans: number
   totalReentries: number
   activeCounters: number

@@ -235,9 +235,17 @@ export async function apiFetch<T>(
       // Success response — unwrap data
       if (json.pagination || json.meta) {
         // Paginated response — return { data, pagination }
+        // Normalize to camelCase (backend meta uses camelCase; legacy pagination may use snake_case)
+        const rawMeta = json.meta || json.pagination
+        const pagination: IPagination = {
+          total: rawMeta.total ?? rawMeta.total_count ?? 0,
+          page: rawMeta.page ?? rawMeta.current_page ?? 1,
+          perPage: rawMeta.perPage ?? rawMeta.per_page ?? 20,
+          totalPages: rawMeta.totalPages ?? rawMeta.total_pages ?? 1,
+        }
         return {
           data: json.data,
-          pagination: json.pagination || json.meta,
+          pagination,
         } as T
       }
       // Non-paginated — just return the data
