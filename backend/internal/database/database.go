@@ -42,13 +42,15 @@ func Connect(cfg config.Config) (*gorm.DB, error) {
         }
 
         // Configure connection pool for PostgreSQL
+        // Cloud Run: reduced pool size to avoid connection exhaustion
+        // (pool × max_instances must not exceed Cloud SQL max_connections)
         sqlDB, err := db.DB()
         if err != nil {
                 return nil, fmt.Errorf("failed to get underlying sql.DB: %w", err)
         }
-        sqlDB.SetMaxOpenConns(25)
-        sqlDB.SetMaxIdleConns(10)
-        sqlDB.SetConnMaxLifetime(5 * time.Minute)
+        sqlDB.SetMaxOpenConns(10)
+        sqlDB.SetMaxIdleConns(5)
+        sqlDB.SetConnMaxLifetime(3 * time.Minute)
 
         // Set log level based on environment
         if cfg.App.Env == "development" {

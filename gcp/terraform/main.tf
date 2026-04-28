@@ -335,6 +335,10 @@ resource "google_cloud_run_v2_service" "api" {
         name  = "DB_HOST"
         value = "/cloudsql/${var.project_id}:${var.region}:${var.instance_name}"
       }
+      env {
+        name  = "DB_SSLMODE"
+        value = "disable"
+      }
 
       # Secrets from Secret Manager (mounted as env vars)
       env {
@@ -396,18 +400,19 @@ resource "google_cloud_run_v2_service" "api" {
       }
     }
 
-    # Cloud SQL connection
-    vpc_access {
-      connectors = []
-      egress     = "PRIVATE_RANGES_ONLY"
-    }
+    # Cloud SQL connection (Unix socket via built-in Cloud SQL Auth Proxy)
+    # No VPC connector needed — Cloud SQL sidecar handles /cloudsql/ paths
 
     scaling {
-      min_instance_count = 0
-      max_instance_count = 10
+      # Single instance for SSE consistency (broadcast is in-memory per-instance)
+      # For multi-instance, replace SSE with Cloud Pub/Sub broadcasting
+      min_instance_count = 1
+      max_instance_count = 1
     }
 
-    timeout = "30s"
+    # Must be >= SSE connection lifetime (max 60 min on Cloud Run)
+    # Default 5 min is too short for real-time SSE connections
+    timeout = "3600s"
   }
 
   traffic {

@@ -8,7 +8,7 @@
 
 steps:
   # ── Build Go binary (static, no CGO) ──────────────────────────────────────
-  - name: 'golang:1.23'
+  - name: 'golang:1.24'
     id: 'build-binary'
     entrypoint: 'sh'
     args:
@@ -55,10 +55,10 @@ steps:
       - '--platform=managed'
       - '--cpu=2'
       - '--memory=1Gi'
-      - '--min-instances=0'
-      - '--max-instances=10'
-      - '--concurrency=200'
-      - '--timeout=30'
+      - '--min-instances=1'
+      - '--max-instances=1'
+      - '--concurrency=80'
+      - '--timeout=3600'
       - '--port=8080'
       - '--set-env-vars=APP_ENV=production,DB_DRIVER=postgres,DB_HOST=/cloudsql/$PROJECT_ID:$_REGION:$_INSTANCE_NAME,DB_NAME=eventku,DB_USER=eventku,DB_PORT=5432,GOOGLE_CLIENT_ID=503551786622-k3uajo9c2d6om6qnqofsa3b47fvo5o6g.apps.googleusercontent.com'
       - '--set-secrets=DB_PASSWORD=database-password:latest,JWT_SECRET=jwt-secret:latest,REFRESH_JWT_SECRET=refresh-jwt-secret:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest'

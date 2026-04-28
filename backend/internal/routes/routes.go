@@ -23,8 +23,17 @@ func Setup(app *fiber.App, db *gorm.DB, hub *services.SSEHub) {
                 AllowCredentials: true,
         }))
 
-        // Health check
+        // Health check — verifies both HTTP server and database connectivity
         app.Get("/health", func(c *fiber.Ctx) error {
+                // Verify DB is reachable (critical for Cloud Run liveness probe)
+                sqlDB, err := db.DB()
+                if err != nil || sqlDB.Ping() != nil {
+                        return c.Status(503).JSON(fiber.Map{
+                                "status":  "unhealthy",
+                                "service": "seleevent-api",
+                                "error":   "database unreachable",
+                        })
+                }
                 return c.JSON(fiber.Map{"status": "ok", "service": "seleevent-api"})
         })
 

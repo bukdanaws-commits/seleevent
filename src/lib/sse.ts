@@ -27,7 +27,23 @@ class SSEClient {
 
   constructor(options: SSEClientOptions = {}) {
     const GO_BACKEND_PORT = process.env.NEXT_PUBLIC_GO_PORT || '8080'
-    this.url = `/?XTransformPort=${GO_BACKEND_PORT}/api/v1/events/stream`
+    const useDirectBackend = process.env.NEXT_PUBLIC_USE_DIRECT_BACKEND === 'true'
+
+    // Cloud Run: use direct API URL (no Caddy proxy)
+    // Local dev: use XTransformPort gateway pattern
+    if (useDirectBackend) {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
+      // For Cloud Run, NEXT_PUBLIC_API_URL is the full backend URL
+      // For local dev with XTransformPort, build the proxy URL
+      if (apiUrl.startsWith('http') || apiUrl.startsWith('/api')) {
+        this.url = `${apiUrl}/api/v1/events/stream`
+      } else {
+        this.url = `/?XTransformPort=${GO_BACKEND_PORT}/api/v1/events/stream`
+      }
+    } else {
+      this.url = `/?XTransformPort=${GO_BACKEND_PORT}/api/v1/events/stream`
+    }
+
     this.reconnectInterval = options.reconnectInterval || 3000
     this.maxReconnectAttempts = options.maxReconnectAttempts || 10
 
