@@ -16,6 +16,8 @@ import (
         "github.com/gofiber/fiber/v2/middleware/recover"
 )
 
+var version = "dev" // overridden via -ldflags at build time
+
 func main() {
         // Load configuration
         config.Load()
@@ -54,7 +56,7 @@ func main() {
 
         // ── Start server in goroutine ─────────────────────────────────────────
         port := config.Cfg.App.Port
-        log.Printf("SeleEvent API starting on port %s", port)
+        log.Printf("SeleEvent API v%s starting on port %s", version, port)
         log.Printf("Environment: %s", config.Cfg.App.Env)
         log.Printf("Database: %s", config.Cfg.DB.Driver)
 

@@ -16,7 +16,7 @@ steps:
   # ── Build Go binary (static, no CGO) ──────────────────────────────────────
   - name: 'golang:1.25'
     id: 'build-binary'
-    entrypoint: 'sh'
+    entrypoint: 'bash'
     args:
       - '-c'
       - |
@@ -24,8 +24,9 @@ steps:
         echo "📦 Downloading Go modules..."
         go mod download
         echo "🔨 Building static binary..."
+        SHORT_SHA=${COMMIT_SHA:0:8}
         CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-          -ldflags="-s -w -X main.version=${COMMIT_SHA:0:8}" \
+          -ldflags="-s -w -X main.version=$SHORT_SHA" \
           -o eventku-api ./cmd/server
         echo "✅ Binary built successfully at backend/eventku-api"
 
