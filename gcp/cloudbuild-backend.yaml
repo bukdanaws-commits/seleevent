@@ -14,7 +14,7 @@
 
 steps:
   # ── Build Go binary (static, no CGO) ──────────────────────────────────────
-  - name: 'golang:1.24'
+  - name: 'golang:1.25'
     id: 'build-binary'
     entrypoint: 'sh'
     args:
@@ -42,7 +42,7 @@ steps:
       - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-api:latest'
       - '-f'
       - 'backend/Dockerfile'
-      - '--build-arg=BINARY_PATH=/workspace/backend/eventku-api'
+      - '--build-arg=BINARY_PATH=backend/eventku-api'
       - '.'
     waitFor: ['build-binary']
 
