@@ -60,3 +60,22 @@ Stage Summary:
 - All 4 CRITICAL + 4 WARNING issues fixed
 - Lint passes clean, dev server running
 - Files modified: backend/Dockerfile, Dockerfile.frontend, src/lib/api.ts, gcp/terraform/main.tf, gcp/terraform/outputs.tf, gcp/terraform/terraform.tfvars.example, gcp/cloudbuild-backend.yaml, gcp/cloudbuild-frontend.yaml, gcp/DEPLOYMENT.md
+
+---
+Task ID: env-fix
+Agent: Main Agent
+Task: Fix .env and .env.example — alignment with actual config.go and api.ts code
+
+Work Log:
+- Fixed NEXT_PUBLIC_USE_DIRECT_BACKEND: true → false (local dev needs Caddy XTransformPort, not direct)
+- Fixed NEXT_PUBLIC_API_URL: "/api/v1" → "" (empty for local dev; Cloud Run uses full URL)
+- Removed dead variables not read by config.go: ENCRYPTION_KEY, FRONTEND_URL, FRONTEND_PORT
+- Added missing NEXT_PUBLIC_MIDTRANS_IS_SANDBOX (used by midtrans.ts but was missing from .env)
+- Added deployment mode documentation comments to both files
+- Verified SSE URL logic works correctly with both local dev and Cloud Run mode
+- Lint passes clean, dev server running
+
+Stage Summary:
+- .env and .env.example now fully aligned with actual codebase
+- Both local dev (Caddy XTransformPort) and Cloud Run (direct backend) modes verified
+- Files modified: .env, .env.example
