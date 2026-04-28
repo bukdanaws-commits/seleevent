@@ -42,9 +42,9 @@ steps:
       - '-t'
       - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-api:latest'
       - '-f'
-      - 'backend/Dockerfile'
-      - '--build-arg=BINARY_PATH=backend/eventku-api'
-      - '.'
+      - 'Dockerfile'
+      - '--build-arg=BINARY_PATH=eventku-api'
+      - 'backend'
     waitFor: ['build-binary']
 
   # ── Push to Artifact Registry ─────────────────────────────────────────────
