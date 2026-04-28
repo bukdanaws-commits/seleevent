@@ -52,3 +52,30 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# Binaries
+backend/server
+backend/seed
+backend/bin/
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+
+# Upload & download
+/upload/
+/download/
+
+# Agent context
+/agent-ctx/
+
+# Z scripts
+/.zscripts/
+
+# Worklog
+worklog*.md
+
+# BSI search
+bsi-brand-search.json

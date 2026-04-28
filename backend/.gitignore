@@ -1,5 +1,7 @@
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 *.exe
 *.exe~
 *.dll
@@ -12,3 +14,14 @@ __debug_bin*
 .env.production
 vendor/
 tmp/
+
+# Compiled binaries
+server
+seed
+/bin/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
