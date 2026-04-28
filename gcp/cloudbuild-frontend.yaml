@@ -90,7 +90,6 @@ steps:
 # ── Default substitution values ─────────────────────────────────────────────
 substitutions:
   _REGION: asia-southeast2
-  _PROJECT_ID: eventku-494416
   _REPO: eventku
   _BACKEND_URL: https://eventku-api-xxxxx-xx.a.run.app
   _MIDTRANS_CLIENT_KEY: Mid-client-sJtCsptoF8hoaFgN

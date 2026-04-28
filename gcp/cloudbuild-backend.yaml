@@ -81,7 +81,6 @@ steps:
 # ── Default substitution values ─────────────────────────────────────────────
 substitutions:
   _REGION: asia-southeast2
-  _PROJECT_ID: eventku-494416
   _INSTANCE_NAME: eventku
   _REPO: eventku
 

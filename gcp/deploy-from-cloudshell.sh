@@ -193,7 +193,7 @@ IMAGE_API="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/eventku-api"
 
 gcloud builds submit . \
   --config=gcp/cloudbuild-backend.yaml \
-  --substitutions=_REGION=$REGION,_PROJECT_ID=$PROJECT_ID,_INSTANCE_NAME=$INSTANCE_NAME,_REPO=$REPO \
+  --substitutions=_REGION=$REGION,_INSTANCE_NAME=$INSTANCE_NAME,_REPO=$REPO \
   --project=$PROJECT_ID \
   --timeout=1200s
 
@@ -212,7 +212,7 @@ info "Building and deploying frontend..."
 
 gcloud builds submit . \
   --config=gcp/cloudbuild-frontend.yaml \
-  --substitutions=_REGION=$REGION,_PROJECT_ID=$PROJECT_ID,_REPO=$REPO,_BACKEND_URL=$BACKEND_URL,_MIDTRANS_CLIENT_KEY=$MIDTRANS_CLIENT_KEY \
+  --substitutions=_REGION=$REGION,_REPO=$REPO,_BACKEND_URL=$BACKEND_URL,_MIDTRANS_CLIENT_KEY=$MIDTRANS_CLIENT_KEY \
   --project=$PROJECT_ID \
   --timeout=1800s
 
