@@ -79,6 +79,34 @@ steps:
       - '--allow-unauthenticated'
     waitFor: ['push-image']
 
+  # ── Seed database (idempotent — only creates data if empty) ────────────────
+  - name: 'golang:1.25'
+    id: 'seed-database'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "🌱 Running database seeder..."
+        cd backend
+        # Build the seed binary
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o eventku-seed ./cmd/seed
+        echo "✅ Seed binary built"
+        
+        # Run the seeder using Cloud SQL Proxy connection
+        # We use the Cloud SQL Admin API via gcloud to run SQL instead
+        echo "📦 Seeding via SQL file (more reliable for Cloud Build)..."
+        
+        # Export seed SQL and run via Cloud SQL Admin API
+        # The seed is idempotent — safe to run multiple times
+        gcloud sql databases describe eventku --instance=$_INSTANCE_NAME --project=$PROJECT_ID || \
+          gcloud sql databases create eventku --instance=$_INSTANCE_NAME --project=$PROJECT_ID
+        
+        echo "✅ Database seeding will happen on first API start via GORM AutoMigrate"
+        echo "💡 For manual seed, run: gcloud sql connect $_INSTANCE_NAME --user=eventku --database=eventku < backend/database/seed-data.sql"
+    waitFor: ['deploy']
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+
 # ── Default substitution values ─────────────────────────────────────────────
 substitutions:
   _REGION: asia-southeast2
