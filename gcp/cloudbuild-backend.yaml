@@ -84,6 +84,7 @@ substitutions:
   _REGION: asia-southeast2
   _INSTANCE_NAME: eventku
   _REPO: eventku
+  COMMIT_SHA: manual
 
 # ── Build options ───────────────────────────────────────────────────────────
 options:
