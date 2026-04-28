@@ -196,7 +196,7 @@ info "Building image with tag: $SHORT_SHA"
 
 gcloud builds submit . \
   --config=gcp/cloudbuild-backend.yaml \
-  --substitutions=_REGION=$REGION,_INSTANCE_NAME=$INSTANCE_NAME,_REPO=$REPO,COMMIT_SHA=$SHORT_SHA \
+  --substitutions=_REGION=$REGION,_INSTANCE_NAME=$INSTANCE_NAME,_REPO=$REPO,_COMMIT_SHA=$SHORT_SHA \
   --project=$PROJECT_ID \
   --timeout=1200s
 
@@ -215,7 +215,7 @@ info "Building and deploying frontend..."
 
 gcloud builds submit . \
   --config=gcp/cloudbuild-frontend.yaml \
-  --substitutions=_REGION=$REGION,_REPO=$REPO,_BACKEND_URL=$BACKEND_URL,_MIDTRANS_CLIENT_KEY=$MIDTRANS_CLIENT_KEY,COMMIT_SHA=$SHORT_SHA \
+  --substitutions=_REGION=$REGION,_REPO=$REPO,_BACKEND_URL=$BACKEND_URL,_MIDTRANS_CLIENT_KEY=$MIDTRANS_CLIENT_KEY,_COMMIT_SHA=$SHORT_SHA \
   --project=$PROJECT_ID \
   --timeout=1800s
 

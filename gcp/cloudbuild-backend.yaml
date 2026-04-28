@@ -24,7 +24,7 @@ steps:
         echo "📦 Downloading Go modules..."
         go mod download
         echo "🔨 Building static binary..."
-        SHORT_SHA=${COMMIT_SHA:0:8}
+        SHORT_SHA=${_COMMIT_SHA:0:8}
         CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
           -ldflags="-s -w -X main.version=$SHORT_SHA" \
           -o eventku-api ./cmd/server
@@ -38,7 +38,7 @@ steps:
     args:
       - 'build'
       - '-t'
-      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-api:$COMMIT_SHA'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-api:$_COMMIT_SHA'
       - '-t'
       - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-api:latest'
       - '-f'
@@ -61,7 +61,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'eventku-api'
-      - '--image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-api:$COMMIT_SHA'
+      - '--image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-api:$_COMMIT_SHA'
       - '--region=$_REGION'
       - '--platform=managed'
       - '--cpu=2'
@@ -84,7 +84,7 @@ substitutions:
   _REGION: asia-southeast2
   _INSTANCE_NAME: eventku
   _REPO: eventku
-  COMMIT_SHA: manual
+  _COMMIT_SHA: manual
 
 # ── Build options ───────────────────────────────────────────────────────────
 options:

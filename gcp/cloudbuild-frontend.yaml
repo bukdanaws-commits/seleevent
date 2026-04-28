@@ -46,7 +46,7 @@ steps:
     args:
       - 'build'
       - '-t'
-      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-web:$COMMIT_SHA'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-web:$_COMMIT_SHA'
       - '-t'
       - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-web:latest'
       - '-f'
@@ -73,7 +73,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'eventku-web'
-      - '--image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-web:$COMMIT_SHA'
+      - '--image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-web:$_COMMIT_SHA'
       - '--region=$_REGION'
       - '--platform=managed'
       - '--cpu=1'
@@ -93,7 +93,7 @@ substitutions:
   _REPO: eventku
   _BACKEND_URL: https://eventku-api-xxxxx-xx.a.run.app
   _MIDTRANS_CLIENT_KEY: Mid-client-sJtCsptoF8hoaFgN
-  COMMIT_SHA: manual
+  _COMMIT_SHA: manual
 
 # ── Build options ───────────────────────────────────────────────────────────
 options:
