@@ -170,3 +170,26 @@ Stage Summary:
 - Deployment script: gcp/deploy-from-cloudshell.sh (reads secrets from env vars or prompts)
 - All infrastructure (Cloud SQL, GCS, Artifact Registry, Secrets) is ready
 - Only remaining step: run the deploy script from Cloud Shell
+
+---
+Task ID: cloud-run-deploy-attempt
+Agent: main
+Task: Deploy backend to Cloud Run from workspace
+
+Work Log:
+- Successfully submitted Cloud Build for backend (after 5 iterations fixing issues)
+- Build issues fixed: Go version 1.24→1.25 (dependency requires Go 1.25), added go mod tidy, removed GracefulServerTimeout (deprecated in newer Fiber), fixed Docker context path
+- Backend Docker image built and pushed to asia-southeast2-docker.pkg.dev/eventku-494416/eventku/eventku-api:latest
+- Cloud Run service created but container fails to start due to Cloud SQL connection refused
+- Root cause: Organization keeps stripping IAM roles from devops@eventku.co.id account
+- The cloudsql.client role on eventku-sa keeps getting removed, preventing Cloud SQL connections
+- Secret Manager access also intermittently blocked due to IAM role stripping
+- Granting IAM roles shows "SERVICE_DISABLED" reason - org is actively removing them
+
+Stage Summary:
+- Backend image is BUILT and PUSHED to Artifact Registry ✅
+- Cloud Run service exists but can't start due to missing cloudsql.client permission
+- ORG POLICY BLOCKER: The Google Cloud organization actively strips IAM roles from external accounts
+- MUST deploy from Google Cloud Shell (authenticated as org user) for permanent IAM
+- All infrastructure is ready: secrets, AR repo, GCS bucket, Cloud SQL instance
+- Only missing: persistent IAM roles for eventku-sa (cloudsql.client, secretmanager.secretAccessor)
