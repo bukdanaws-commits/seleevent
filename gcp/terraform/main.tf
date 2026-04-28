@@ -2,7 +2,7 @@
 #  EVENTKU — Terraform IaC for GCP Infrastructure
 #
 #  Resources provisioned:
-#    - Cloud SQL PostgreSQL 16 (regional HA)
+#    - Cloud SQL PostgreSQL 18 (regional HA)
 #    - Cloud Storage bucket (static assets)
 #    - Secret Manager secrets (DB password, JWT, Google OAuth, Midtrans)
 #    - Artifact Registry (Docker images)
@@ -70,15 +70,15 @@ resource "random_password" "refresh_jwt_secret" {
 
 resource "google_sql_database_instance" "default" {
   name             = var.instance_name
-  database_version = "POSTGRES_16"
+  database_version = "POSTGRES_18"
   region           = var.region
 
   settings {
-    # Machine type: 2 vCPU, 3840 MB RAM
-    tier = "db-custom-2-4096"
+    # Machine type: 2 vCPU, 7680 MB RAM
+    tier = "db-custom-2-7680"
 
     disk_type      = "SSD"
-    disk_size      = 20
+    disk_size      = 10
     disk_autoresize = true
     disk_autoresize_limit = 100
 
@@ -209,6 +209,7 @@ resource "google_storage_bucket_iam_member" "assets_public_read" {
 #
 #   gcloud secrets create google-client-id --data-file=- <<< "YOUR_CLIENT_ID"
 #   gcloud secrets create google-client-secret --data-file=- <<< "YOUR_CLIENT_SECRET"
+#   gcloud secrets create midtrans-merchant-id --data-file=- <<< "YOUR_MERCHANT_ID"
 #   gcloud secrets create midtrans-server-key --data-file=- <<< "YOUR_SERVER_KEY"
 #   gcloud secrets create midtrans-client-key --data-file=- <<< "YOUR_CLIENT_KEY"
 #   gcloud secrets versions add google-client-id --data-file=- <<< "UPDATED_VALUE"
@@ -262,6 +263,13 @@ resource "google_secret_manager_secret" "google_client_id" {
 
 resource "google_secret_manager_secret" "google_client_secret" {
   secret_id = "google-client-secret"
+  replication {
+    automatic = true
+  }
+}
+
+resource "google_secret_manager_secret" "midtrans_merchant_id" {
+  secret_id = "midtrans-merchant-id"
   replication {
     automatic = true
   }
@@ -328,6 +336,7 @@ resource "google_secret_manager_secret_iam_member" "sa_secret_access" {
     google_secret_manager_secret.refresh_jwt_secret.secret_id,
     google_secret_manager_secret.google_client_id.secret_id,
     google_secret_manager_secret.google_client_secret.secret_id,
+    google_secret_manager_secret.midtrans_merchant_id.secret_id,
     google_secret_manager_secret.midtrans_server_key.secret_id,
     google_secret_manager_secret.midtrans_client_key.secret_id,
   ])
@@ -384,6 +393,11 @@ resource "google_cloud_run_v2_service" "api" {
         value = "disable"
       }
 
+      env {
+        name  = "MIDTRANS_IS_SANDBOX"
+        value = "true"
+      }
+
       # Secrets from Secret Manager (mounted as env vars)
       env {
         name = "DB_PASSWORD"
@@ -426,6 +440,15 @@ resource "google_cloud_run_v2_service" "api" {
         value_from {
           secret_key_ref {
             secret  = google_secret_manager_secret.google_client_secret.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "MIDTRANS_MERCHANT_ID"
+        value_from {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.midtrans_merchant_id.secret_id
             version = "latest"
           }
         }

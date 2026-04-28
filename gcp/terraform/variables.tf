@@ -18,24 +18,24 @@ variable "project_id" {
 variable "region" {
   description = "GCP Region for all resources"
   type        = string
-  default     = "asia-southeast1"
+  default     = "asia-southeast2"
 
   validation {
-    condition     = contains(["asia-southeast1", "asia-east1", "asia-northeast1", "us-central1", "europe-west1"], var.region)
-    error_message = "Region must be one of: asia-southeast1, asia-east1, asia-northeast1, us-central1, europe-west1"
+    condition     = contains(["asia-southeast1", "asia-southeast2", "asia-east1", "asia-northeast1", "us-central1", "europe-west1"], var.region)
+    error_message = "Region must be one of: asia-southeast1, asia-southeast2, asia-east1, asia-northeast1, us-central1, europe-west1"
   }
 }
 
 variable "zone" {
   description = "GCP Zone (derived from region)"
   type        = string
-  default     = "asia-southeast1-a"
+  default     = "asia-southeast2-a"
 }
 
 variable "instance_name" {
   description = "Cloud SQL instance name"
   type        = string
-  default     = "eventku-db"
+  default     = "eventku"
 
   validation {
     condition     = can(regex("^[a-z][a-z0-9-]{1,25}[a-z0-9]$", var.instance_name))

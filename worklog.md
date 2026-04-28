@@ -79,3 +79,35 @@ Stage Summary:
 - .env and .env.example now fully aligned with actual codebase
 - Both local dev (Caddy XTransformPort) and Cloud Run (direct backend) modes verified
 - Files modified: .env, .env.example
+
+---
+Task ID: gcp-region-fix
+Agent: Main Agent
+Task: Fix all 8 GCP deployment issues — align with existing Cloud SQL (PG18, instance=eventku, region=asia-southeast2)
+
+Work Log:
+- CRITICAL 1: Added 4 missing secrets to setup.sh (google-client-id, midtrans-server-key, midtrans-client-key, midtrans-merchant-id) — now 8 total secrets
+- CRITICAL 2: Removed hardcoded GOOGLE_CLIENT_SECRET from setup.sh — now uses env vars or interactive prompt for all external secrets
+- CRITICAL 3: Changed all default regions from asia-southeast1 → asia-southeast2 (Jakarta) across ALL files
+- WARNING 4: Aligned Cloud SQL tier: db-custom-2-4096 → db-custom-2-7680, disk 20GB → 10GB, PG16 → PG18
+- WARNING 5: Removed redis.googleapis.com from setup.sh (not needed)
+- WARNING 6: Removed unused ZONE variable from setup.sh
+- WARNING 7: Added MIDTRANS_MERCHANT_ID as secret everywhere (setup.sh, cloudbuild-backend.yaml, terraform main.tf)
+- WARNING 8: Added service account for Frontend Cloud Run (--service-account=eventku-sa@...)
+- Added MIDTRANS_IS_SANDBOX=true env var to cloudbuild-backend.yaml and terraform main.tf
+- Added NEXT_PUBLIC_MIDTRANS_CLIENT_KEY + NEXT_PUBLIC_MIDTRANS_IS_SANDBOX build args to Dockerfile.frontend and cloudbuild-frontend.yaml
+- Updated all instance names from eventku-db → eventku (matching actual Cloud SQL instance)
+- Updated all comment examples in shell scripts to use asia-southeast2
+- Updated DEPLOYMENT.md: all regions, instance names, tier, and secrets references
+- Updated terraform: variables.tf (defaults + validation), main.tf (PG18, tier, midtrans-merchant-id), outputs.tf, tfvars.example
+- setup.sh now detects existing Cloud SQL instance and skips creation
+- setup-github-deploy.sh now checks all 8 secrets (was only checking 4)
+
+Stage Summary:
+- All 8 issues fixed, 10 files modified
+- Region: asia-southeast2 (Jakarta) everywhere
+- Instance: eventku (not eventku-db) everywhere
+- PostgreSQL: 18 (not 16) everywhere
+- Secrets: 8 total (was 4) — all checked in CI/CD scripts
+- Cloud SQL: existing instance detected, not recreated
+- No more hardcoded secrets in any script

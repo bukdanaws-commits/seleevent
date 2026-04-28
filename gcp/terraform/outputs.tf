@@ -65,13 +65,14 @@ output "storage_bucket_url" {
 output "secrets" {
   description = "Secret Manager secret names"
   value = {
-    database_password   = google_secret_manager_secret.database_password.secret_id
-    jwt_secret          = google_secret_manager_secret.jwt_secret.secret_id
-    refresh_jwt_secret  = google_secret_manager_secret.refresh_jwt_secret.secret_id
-    google_client_id    = google_secret_manager_secret.google_client_id.secret_id
+    database_password    = google_secret_manager_secret.database_password.secret_id
+    jwt_secret           = google_secret_manager_secret.jwt_secret.secret_id
+    refresh_jwt_secret   = google_secret_manager_secret.refresh_jwt_secret.secret_id
+    google_client_id     = google_secret_manager_secret.google_client_id.secret_id
     google_client_secret = google_secret_manager_secret.google_client_secret.secret_id
-    midtrans_server_key = google_secret_manager_secret.midtrans_server_key.secret_id
-    midtrans_client_key = google_secret_manager_secret.midtrans_client_key.secret_id
+    midtrans_merchant_id = google_secret_manager_secret.midtrans_merchant_id.secret_id
+    midtrans_server_key  = google_secret_manager_secret.midtrans_server_key.secret_id
+    midtrans_client_key  = google_secret_manager_secret.midtrans_client_key.secret_id
   }
 }
 

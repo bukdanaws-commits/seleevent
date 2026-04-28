@@ -9,7 +9,7 @@
 #    ./gcp/setup-github-deploy.sh <PROJECT_ID> [REGION] [GITHUB_REPO]
 #
 #  Example:
-#    ./gcp/setup-github-deploy.sh eventku-494416 asia-southeast1 \
+#    ./gcp/setup-github-deploy.sh eventku-494416 asia-southeast2 \
 #        github.com/bukdanaws-commits/seleevent
 #
 #  Prerequisites:
@@ -21,14 +21,14 @@
 set -euo pipefail
 
 PROJECT_ID=${1:?Error: PROJECT_ID required}
-REGION=${2:-asia-southeast1}
-INSTANCE_NAME="eventku-db"
+REGION=${2:-asia-southeast2}
+INSTANCE_NAME="eventku"
 GITHUB_REPO=${3:-"github.com/bukdanaws-commits/seleevent"}
 
 echo "================================================"
 echo "  EVENTKU — GitHub CI/CD Setup"
 echo "  Project:  $PROJECT_ID"
-echo "  Region:   $REGION"
+echo "  Region:   $REGION (Jakarta)"
 echo "  GitHub:   $GITHUB_REPO"
 echo "================================================"
 
@@ -53,14 +53,14 @@ fi
 echo "  ✅ Artifact Registry: docker"
 
 # Check secrets exist
-for SECRET in database-password jwt-secret refresh-jwt-secret google-client-secret; do
+for SECRET in database-password jwt-secret refresh-jwt-secret google-client-id google-client-secret midtrans-merchant-id midtrans-server-key midtrans-client-key; do
   if ! gcloud secrets describe "$SECRET" --project="$PROJECT_ID" > /dev/null 2>&1; then
     echo "❌ Secret '$SECRET' not found!"
     echo "   Run ./gcp/setup.sh $PROJECT_ID first."
     exit 1
   fi
 done
-echo "  ✅ Secret Manager: 4 secrets configured"
+echo "  ✅ Secret Manager: 8 secrets configured"
 
 # ── Step 2: Ensure Cloud Build has required permissions ──
 echo ""

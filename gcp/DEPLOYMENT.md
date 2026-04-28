@@ -48,14 +48,14 @@ Script ini akan mengaktifkan API yang diperlukan, membuat Cloud SQL instance, Se
 
 ```bash
 chmod +x gcp/setup.sh
-./gcp/setup.sh eventku-494416 asia-southeast1
+./gcp/setup.sh eventku-494416 asia-southeast2
 ```
 
 **Yang dilakukan script:**
 - Enable API: Cloud Run, Cloud SQL Admin, Secret Manager, Artifact Registry, Cloud Build
-- Buat PostgreSQL instance di Cloud SQL (`eventku-db`)
+- Buat PostgreSQL instance di Cloud SQL (`eventku`)
 - Buat database `eventku` dan user `eventku`
-- Buat secrets di Secret Manager (`db-password`, `jwt-secret`)
+- Buat 8 secrets di Secret Manager (database-password, jwt-secret, google-client-id, google-client-secret, midtrans-merchant-id, midtrans-server-key, midtrans-client-key)
 - Buat Artifact Registry repository (`docker`)
 
 ---
@@ -66,7 +66,7 @@ EVENTKU menggunakan GORM auto-migrate, sehingga tabel akan dibuat otomatis saat 
 
 ```bash
 # (Opsional) Connect ke Cloud SQL untuk verifikasi manual
-gcloud sql connect eventku-db --user=eventku --database=eventku
+gcloud sql connect eventku --user=eventku --database=eventku
 ```
 
 > **Catatan:** Tidak perlu menjalankan migration manual. GORM akan auto-migrate semua model saat backend pertama kali menyala di Cloud Run.
@@ -98,7 +98,7 @@ Masih di halaman Cloud Build Triggers:
 1. Klik **"Create Trigger"**
 2. Konfigurasi:
    - **Name:** `eventku-backend-deploy`
-   - **Region:** `asia-southeast1`
+   - **Region:** `asia-southeast2`
    - **Event:** Push to a branch
    - **Source repository:** Pilih repo `bukdanaws-commits/seleevent`
    - **Branch:** `^main$`
@@ -107,17 +107,16 @@ Masih di halaman Cloud Build Triggers:
 3. Klik **Advanced** → **Substitution variables**, tambahkan:
    | Variable | Value |
    |----------|-------|
-   | `_REGION` | `asia-southeast1` |
+   | `_REGION` | `asia-southeast2` |
    | `_PROJECT_ID` | `eventku-494416` |
-   | `_INSTANCE_NAME` | `eventku-db` |
-4. Klik **Create**
+   | `_INSTANCE_NAME` | `eventku` |
 
 ### 4.3. Buat Trigger: Frontend Web
 
 1. Klik **"Create Trigger"** lagi
 2. Konfigurasi:
    - **Name:** `eventku-frontend-deploy`
-   - **Region:** `asia-southeast1`
+   - **Region:** `asia-southeast2`
    - **Event:** Push to a branch
    - **Source repository:** Pilih repo `bukdanaws-commits/seleevent`
    - **Branch:** `^main$`
@@ -126,7 +125,7 @@ Masih di halaman Cloud Build Triggers:
 3. Klik **Advanced** → **Substitution variables**, tambahkan:
    | Variable | Value |
    |----------|-------|
-   | `_REGION` | `asia-southeast1` |
+   | `_REGION` | `asia-southeast2` |
    | `_PROJECT_ID` | `eventku-494416` |
    | `_BACKEND_URL` | `(isi setelah backend deploy berhasil)` |
 
@@ -165,7 +164,7 @@ Jika lebih suka CLI, jalankan script ini:
 
 ```bash
 # Setup GitHub triggers via CLI
-./gcp/setup-github-deploy.sh eventku-494416 asia-southeast1 github.com/bukdanaws-commits/seleevent
+./gcp/setup-github-deploy.sh eventku-494416 asia-southeast2 github.com/bukdanaws-commits/seleevent
 ```
 
 ---
@@ -178,7 +177,7 @@ Jika GitHub trigger tidak bisa di-set, kamu bisa deploy manual dari terminal.
 
 ```bash
 chmod +x gcp/deploy-backend.sh
-./gcp/deploy-backend.sh eventku-494416 asia-southeast1
+./gcp/deploy-backend.sh eventku-494416 asia-southeast2
 ```
 
 ### 5.2. Deploy Frontend
@@ -188,23 +187,23 @@ chmod +x gcp/deploy-frontend.sh
 
 # Dapatkan URL backend
 BACKEND_URL=$(gcloud run services describe eventku-api \
-  --region=asia-southeast1 \
+  --region=asia-southeast2 \
   --format='value(status.url)')
 
 # Deploy frontend
-./gcp/deploy-frontend.sh eventku-494416 asia-southeast1 "$BACKEND_URL"
+./gcp/deploy-frontend.sh eventku-494416 asia-southeast2 "$BACKEND_URL"
 ```
 
 ### 5.3. Verifikasi
 
 ```bash
 # Cek status service
-gcloud run services describe eventku-api --region=asia-southeast1
-gcloud run services describe eventku-web --region=asia-southeast1
+gcloud run services describe eventku-api --region=asia-southeast2
+gcloud run services describe eventku-web --region=asia-southeast2
 
 # Cek logs
-gcloud run services logs read eventku-api --region=asia-southeast1 --limit=50
-gcloud run services logs read eventku-web --region=asia-southeast1 --limit=50
+gcloud run services logs read eventku-api --region=asia-southeast2 --limit=50
+gcloud run services logs read eventku-web --region=asia-southeast2 --limit=50
 ```
 
 ---
@@ -233,13 +232,13 @@ Sekarang setiap push ke `main`, frontend akan build dengan URL backend yang bena
 gcloud beta run domain-mappings create \
   --service=eventku-web \
   --domain=eventku.id \
-  --region=asia-southeast1
+  --region=asia-southeast2
 
 # Map domain ke service backend API
 gcloud beta run domain-mappings create \
   --service=eventku-api \
   --domain=api.eventku.id \
-  --region=asia-southeast1
+  --region=asia-southeast2
 ```
 
 ### 6.2. Setup DNS
@@ -259,7 +258,7 @@ SSL certificate akan otomatis di-provision oleh Google setelah DNS terpropagasi.
 gcloud beta run domain-mappings describe \
   --service=eventku-web \
   --domain=eventku.id \
-  --region=asia-southeast1
+  --region=asia-southeast2
 ```
 
 ---
@@ -271,15 +270,15 @@ Untuk mengisi data awal (admin user, contoh event, dll.):
 ```bash
 # Via Cloud Run Job
 gcloud run jobs create seed-data \
-  --image asia-southeast1-docker.pkg.dev/eventku-494416/docker/eventku-api:latest \
+  --image asia-southeast2-docker.pkg.dev/eventku-494416/docker/eventku-api:latest \
   --command="./eventku-api" \
   --args="--seed" \
-  --region=asia-southeast1 \
+  --region=asia-southeast2 \
   --set-env-vars="APP_ENV=production" \
-  --set-cloudsql-instances="eventku-494416:asia-southeast1:eventku-db"
+  --set-cloudsql-instances="eventku-494416:asia-southeast2:eventku"
 
 # Jalankan job
-gcloud run jobs execute seed-data --region=asia-southeast1 --wait
+gcloud run jobs execute seed-data --region=asia-southeast2 --wait
 ```
 
 ---
@@ -289,7 +288,7 @@ gcloud run jobs execute seed-data --region=asia-southeast1 --wait
 ### Cloud Console
 
 - **Cloud Run Logs**: Console → Cloud Run → eventku-api/eventku-web → Logs
-- **Cloud SQL Monitoring**: Console → Cloud SQL → eventku-db → Monitoring
+- **Cloud SQL Monitoring**: Console → Cloud SQL → eventku → Monitoring
 - **Resource Metrics**: Console → Monitoring → Dashboards
 
 ### Command Line
@@ -297,18 +296,18 @@ gcloud run jobs execute seed-data --region=asia-southeast1 --wait
 ```bash
 # Lihat real-time logs backend
 gcloud run services logs read eventku-api \
-  --region=asia-southeast1 \
+  --region=asia-southeast2 \
   --limit=100 \
   --format='table(timestamp,jsonPayload.message)'
 
 # Lihat real-time logs frontend
 gcloud run services logs read eventku-web \
-  --region=asia-southeast1 \
+  --region=asia-southeast2 \
   --limit=100 \
   --format='table(timestamp,jsonPayload.message)'
 
 # Cek metrik Cloud SQL
-gcloud sql instances describe eventku-db --format='value(state,settings.diskSize,settings.dataDiskSizeGb)'
+gcloud sql instances describe eventku --format='value(state,settings.diskSize,settings.dataDiskSizeGb)'
 ```
 
 ### Alerting (Opsional)
@@ -330,17 +329,17 @@ Cloud Run menyimpan riwayat revisi, sehingga rollback sangat mudah:
 
 ```bash
 # Lihat daftar revisi
-gcloud run revisions list --service=eventku-api --region=asia-southeast1
+gcloud run revisions list --service=eventku-api --region=asia-southeast2
 
 # Rollback ke revisi sebelumnya
 gcloud run services update-traffic eventku-api \
   --to-revisions=eventku-api-00001-xxx=100 \
-  --region=asia-southeast1
+  --region=asia-southeast2
 
 # Rollback frontend
 gcloud run services update-traffic eventku-web \
   --to-revisions=eventku-web-00001-xxx=100 \
-  --region=asia-southeast1
+  --region=asia-southeast2
 ```
 
 ---
@@ -354,7 +353,7 @@ Cloud Run secara otomatis melakukan scaling berdasarkan traffic. Konfigurasi def
 ```bash
 # Ubah konfigurasi scaling (opsional)
 gcloud run services update eventku-api \
-  --region=asia-southeast1 \
+  --region=asia-southeast2 \
   --min-instances=0 \
   --max-instances=100 \
   --cpu=1 \
@@ -362,7 +361,7 @@ gcloud run services update eventku-api \
 
 # Untuk frontend
 gcloud run services update eventku-web \
-  --region=asia-southeast1 \
+  --region=asia-southeast2 \
   --min-instances=0 \
   --max-instances=100 \
   --cpu=1 \
@@ -373,9 +372,9 @@ gcloud run services update eventku-web \
 
 ```bash
 # Upgrade instance (jika diperlukan)
-gcloud sql instances patch eventku-db \
-  --tier=db-custom-2-4096 \
-  --region=asia-southeast1
+gcloud sql instances patch eventku \
+  --tier=db-custom-2-7680 \
+  --region=asia-southeast2
 ```
 
 ---
@@ -386,13 +385,13 @@ gcloud sql instances patch eventku-db \
 
 ```bash
 # Logs backend
-gcloud run services logs read eventku-api --region=asia-southeast1
+gcloud run services logs read eventku-api --region=asia-southeast2
 
 # Logs frontend
-gcloud run services logs read eventku-web --region=asia-southeast1
+gcloud run services logs read eventku-web --region=asia-southeast2
 
 # Logs Cloud SQL
-gcloud sql instances log-flags list eventku-db
+gcloud sql instances log-flags list eventku
 ```
 
 ### Debug Container
@@ -400,22 +399,22 @@ gcloud sql instances log-flags list eventku-db
 ```bash
 # Jalankan container interaktif untuk debugging
 gcloud run jobs execute debug-job \
-  --region=asia-southeast1 \
+  --region=asia-southeast2 \
   --wait \
-  --image=asia-southeast1-docker.pkg.dev/eventku-494416/docker/eventku-api:latest
+  --image=asia-southeast2-docker.pkg.dev/eventku-494416/docker/eventku-api:latest
 ```
 
 ### Cek Cloud SQL
 
 ```bash
 # Cek status instance
-gcloud sql instances describe eventku-db
+gcloud sql instances describe eventku
 
 # Cek koneksi
-gcloud sql connect eventku-db --user=eventku --database=eventku
+gcloud sql connect eventku --user=eventku --database=eventku
 
 # Restart instance (jika perlu)
-gcloud sql instances restart eventku-db
+gcloud sql instances restart eventku
 ```
 
 ### Masalah Umum
@@ -435,12 +434,12 @@ Untuk melihat environment variables yang aktif:
 ```bash
 # Lihat env vars backend (tanpa menampilkan secret values)
 gcloud run services describe eventku-api \
-  --region=asia-southeast1 \
+  --region=asia-southeast2 \
   --format='yaml(spec.template.spec.containers[0].env)'
 
 # Update env var
 gcloud run services update eventku-api \
-  --region=asia-southeast1 \
+  --region=asia-southeast2 \
   --update-env-vars="APP_ENV=staging"
 ```
 
@@ -538,6 +537,9 @@ echo -n "YOUR_GOOGLE_CLIENT_SECRET" | \
   gcloud secrets versions add google-client-secret --data-file=-
 
 # Set Midtrans keys
+echo -n "YOUR_MIDTRANS_MERCHANT_ID" | \
+  gcloud secrets versions add midtrans-merchant-id --data-file=-
+
 echo -n "YOUR_MIDTRANS_SERVER_KEY" | \
   gcloud secrets versions add midtrans-server-key --data-file=-
 
@@ -545,7 +547,7 @@ echo -n "YOUR_MIDTRANS_CLIENT_KEY" | \
   gcloud secrets versions add midtrans-client-key --data-file=-
 ```
 
-> **Tanpa secret ini, backend akan crash saat startup** karena GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, dan MIDTRANS_SERVER_KEY diperlukan untuk autentikasi dan payment.
+> **Tanpa secret ini, backend akan crash saat startup** karena GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, MIDTRANS_MERCHANT_ID, dan MIDTRANS_SERVER_KEY diperlukan untuk autentikasi dan payment.
 
 ---
 

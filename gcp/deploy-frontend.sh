@@ -2,20 +2,20 @@
 # =============================================================
 #  EVENTKU — Deploy Next.js Frontend to Cloud Run
 #  Usage:   ./gcp/deploy-frontend.sh <PROJECT_ID> [REGION] <BACKEND_URL>
-#  Example: ./gcp/deploy-frontend.sh eventku-494416 asia-southeast1 \
+#  Example: ./gcp/deploy-frontend.sh eventku-494416 asia-southeast2 \
 #             https://eventku-api-xxxxx-xx.a.run.app
 # =============================================================
 
 set -euo pipefail
 
 PROJECT_ID=${1:?Error: PROJECT_ID required. Usage: ./deploy-frontend.sh <PROJECT_ID> [REGION] <BACKEND_URL>}
-REGION=${2:-asia-southeast1}
+REGION=${2:-asia-southeast2}
 BACKEND_URL=${3:?Error: BACKEND_URL required. Usage: ./deploy-frontend.sh <PROJECT_ID> [REGION] <BACKEND_URL>}
 
 echo "================================================"
 echo "  EVENTKU — Deploying Frontend Web"
 echo "  Project:    $PROJECT_ID"
-echo "  Region:     $REGION"
+echo "  Region:     $REGION (Jakarta)"
 echo "  Backend:    $BACKEND_URL"
 echo "================================================"
 

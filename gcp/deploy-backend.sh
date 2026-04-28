@@ -2,19 +2,19 @@
 # =============================================================
 #  EVENTKU — Deploy Golang API to Cloud Run
 #  Usage:   ./gcp/deploy-backend.sh <PROJECT_ID> [REGION]
-#  Example: ./gcp/deploy-backend.sh eventku-494416 asia-southeast1
+#  Example: ./gcp/deploy-backend.sh eventku-494416 asia-southeast2
 # =============================================================
 
 set -euo pipefail
 
 PROJECT_ID=${1:?Error: PROJECT_ID required. Usage: ./deploy-backend.sh <PROJECT_ID> [REGION]}
-REGION=${2:-asia-southeast1}
-INSTANCE_NAME="eventku-db"
+REGION=${2:-asia-southeast2}
+INSTANCE_NAME="eventku"
 
 echo "================================================"
 echo "  EVENTKU — Deploying Backend API"
 echo "  Project: $PROJECT_ID"
-echo "  Region:  $REGION"
+echo "  Region:  $REGION (Jakarta)"
 echo "================================================"
 
 # Verify we're in the project root

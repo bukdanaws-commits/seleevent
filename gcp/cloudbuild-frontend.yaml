@@ -28,6 +28,8 @@ steps:
       - 'NEXT_PUBLIC_API_URL=$_BACKEND_URL'
       - 'NEXT_PUBLIC_GO_PORT=8080'
       - 'NEXT_PUBLIC_USE_DIRECT_BACKEND=true'
+      - 'NEXT_PUBLIC_MIDTRANS_CLIENT_KEY=$_MIDTRANS_CLIENT_KEY'
+      - 'NEXT_PUBLIC_MIDTRANS_IS_SANDBOX=true'
       - 'NODE_ENV=production'
     args:
       - '-c'
@@ -52,6 +54,8 @@ steps:
       - '--build-arg=NEXT_PUBLIC_API_URL=$_BACKEND_URL'
       - '--build-arg=NEXT_PUBLIC_GO_PORT=8080'
       - '--build-arg=NEXT_PUBLIC_USE_DIRECT_BACKEND=true'
+      - '--build-arg=NEXT_PUBLIC_MIDTRANS_CLIENT_KEY=$_MIDTRANS_CLIENT_KEY'
+      - '--build-arg=NEXT_PUBLIC_MIDTRANS_IS_SANDBOX=true'
       - '.'
     waitFor: ['build-nextjs']
 
@@ -79,14 +83,16 @@ steps:
       - '--concurrency=80'
       - '--timeout=300'
       - '--port=3000'
+      - '--service-account=eventku-sa@$PROJECT_ID.iam.gserviceaccount.com'
       - '--allow-unauthenticated'
     waitFor: ['push-image']
 
 # ── Default substitution values ─────────────────────────────────────────────
 substitutions:
-  _REGION: asia-southeast1
+  _REGION: asia-southeast2
   _PROJECT_ID: eventku-494416
   _BACKEND_URL: https://eventku-api-xxxxx-xx.a.run.app
+  _MIDTRANS_CLIENT_KEY: Mid-client-sJtCsptoF8hoaFgN
 
 # ── Build options ───────────────────────────────────────────────────────────
 options:
