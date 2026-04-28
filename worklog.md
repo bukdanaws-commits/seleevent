@@ -35,3 +35,28 @@ Stage Summary:
   4. db.ts: Fixed stale "SQLite/PostgreSQL" comment → "PostgreSQL"
 
 - **Verification**: ESLint passes with zero errors, dev server running clean
+
+---
+Task ID: 1-8
+Agent: Main Agent
+Task: Fix 4 CRITICAL + 4 WARNING Docker/Cloud Run deployment issues
+
+Work Log:
+- CRITICAL 1: Rewrote backend/Dockerfile with ARG BINARY_PATH support — Cloud Build can pass pre-built binary, local builds compile inside Docker
+- CRITICAL 2: Fixed api.ts getBaseUrl() inverted logic — Cloud Run mode (USE_DIRECT_BACKEND=true + API_BASE) now returns API_BASE directly instead of XTransformPort
+- CRITICAL 3: Removed cpu_idle=true from Terraform main.tf (was contradicting --no-cpu-throttling in Cloud Build)
+- CRITICAL 4: Added 4 missing secrets to Terraform: google-client-id, google-client-secret, midtrans-server-key, midtrans-client-key; added SA IAM bindings for new secrets; added secret env vars to Cloud Run container; added secretmanager.secretAccessor to Cloud Build SA
+- WARNING 5: Removed libc6-compat from backend/Dockerfile (not needed for CGO_ENABLED=0)
+- WARNING 6: Moved GOOGLE_CLIENT_ID from hardcoded env var to Secret Manager in Terraform + Cloud Build
+- WARNING 7: Added midtrans-server-key and midtrans-client-key secrets to Terraform with IAM bindings
+- WARNING 8: Changed bun install --frozen-lockfile to bun install in both Dockerfile.frontend and cloudbuild-frontend.yaml
+- Updated cloudbuild-backend.yaml: fixed binary path, added waitFor dependencies, removed hardcoded GOOGLE_CLIENT_ID
+- Updated cloudbuild-frontend.yaml: added waitFor dependencies for correct step ordering
+- Updated terraform/outputs.tf: added new secrets to outputs
+- Updated terraform/terraform.tfvars.example: added post-apply secret setup instructions
+- Updated gcp/DEPLOYMENT.md: added "Setup External Secrets" section
+
+Stage Summary:
+- All 4 CRITICAL + 4 WARNING issues fixed
+- Lint passes clean, dev server running
+- Files modified: backend/Dockerfile, Dockerfile.frontend, src/lib/api.ts, gcp/terraform/main.tf, gcp/terraform/outputs.tf, gcp/terraform/terraform.tfvars.example, gcp/cloudbuild-backend.yaml, gcp/cloudbuild-frontend.yaml, gcp/DEPLOYMENT.md

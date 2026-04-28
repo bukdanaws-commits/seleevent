@@ -525,6 +525,30 @@ Untuk menghemat biaya:
 
 ---
 
+## Setup External Secrets (WAJIB setelah Terraform Apply)
+
+Setelah menjalankan `terraform apply`, secret berikut **HARUS diisi manual** karena berisi kredensial eksternal yang tidak bisa di-generate otomatis:
+
+```bash
+# Set Google OAuth credentials
+echo -n "YOUR_GOOGLE_CLIENT_ID" | \
+  gcloud secrets versions add google-client-id --data-file=-
+
+echo -n "YOUR_GOOGLE_CLIENT_SECRET" | \
+  gcloud secrets versions add google-client-secret --data-file=-
+
+# Set Midtrans keys
+echo -n "YOUR_MIDTRANS_SERVER_KEY" | \
+  gcloud secrets versions add midtrans-server-key --data-file=-
+
+echo -n "YOUR_MIDTRANS_CLIENT_KEY" | \
+  gcloud secrets versions add midtrans-client-key --data-file=-
+```
+
+> **Tanpa secret ini, backend akan crash saat startup** karena GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, dan MIDTRANS_SERVER_KEY diperlukan untuk autentikasi dan payment.
+
+---
+
 ## Keamanan
 
 - **Secrets** disimpan di Secret Manager, bukan environment variables plaintext

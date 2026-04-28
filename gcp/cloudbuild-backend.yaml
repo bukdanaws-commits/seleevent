@@ -1,6 +1,12 @@
 # =============================================================================
 #  Cloud Build Configuration — EVENTKU Golang Backend API
 #
+#  Build strategy:
+#    Step 1: Build Go binary externally (faster with Cloud Build machine type)
+#    Step 2: Build Docker image using pre-built binary (no rebuild inside Docker)
+#    Step 3: Push to Artifact Registry
+#    Step 4: Deploy to Cloud Run
+#
 #  Triggers:
 #    - Push to main branch
 #    - Manual: gcloud builds submit --config gcp/cloudbuild-backend.yaml
@@ -20,10 +26,12 @@ steps:
         echo "🔨 Building static binary..."
         CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
           -ldflags="-s -w -X main.version=${COMMIT_SHA:0:8}" \
-          -o /workspace/eventku-api ./cmd/server
-        echo "✅ Binary built successfully"
+          -o eventku-api ./cmd/server
+        echo "✅ Binary built successfully at backend/eventku-api"
 
-  # ── Build Docker image ────────────────────────────────────────────────────
+  # ── Build Docker image (uses pre-built binary) ────────────────────────────
+  # The Dockerfile supports BINARY_PATH build arg — when provided, it copies
+  # the pre-built binary instead of rebuilding from source.
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-image'
     args:
@@ -34,13 +42,15 @@ steps:
       - '$_REGION-docker.pkg.dev/$PROJECT_ID/docker/eventku-api:latest'
       - '-f'
       - 'backend/Dockerfile'
-      - '--build-arg=BINARY_PATH=/workspace/eventku-api'
+      - '--build-arg=BINARY_PATH=backend/eventku-api'
       - '.'
+    waitFor: ['build-binary']
 
   # ── Push to Artifact Registry ─────────────────────────────────────────────
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-image'
     args: ['push', '--all-tags', '$_REGION-docker.pkg.dev/$PROJECT_ID/docker/eventku-api']
+    waitFor: ['build-image']
 
   # ── Deploy to Cloud Run ───────────────────────────────────────────────────
   - name: 'gcr.io/cloud-builders/gcloud'
@@ -60,12 +70,13 @@ steps:
       - '--concurrency=80'
       - '--timeout=3600'
       - '--port=8080'
-      - '--set-env-vars=APP_ENV=production,DB_DRIVER=postgres,DB_HOST=/cloudsql/$PROJECT_ID:$_REGION:$_INSTANCE_NAME,DB_NAME=eventku,DB_USER=eventku,DB_PORT=5432,GOOGLE_CLIENT_ID=503551786622-k3uajo9c2d6om6qnqofsa3b47fvo5o6g.apps.googleusercontent.com'
-      - '--set-secrets=DB_PASSWORD=database-password:latest,JWT_SECRET=jwt-secret:latest,REFRESH_JWT_SECRET=refresh-jwt-secret:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest'
+      - '--no-cpu-throttling'
+      - '--set-env-vars=APP_ENV=production,DB_DRIVER=postgres,DB_HOST=/cloudsql/$PROJECT_ID:$_REGION:$_INSTANCE_NAME,DB_NAME=eventku,DB_USER=eventku,DB_PORT=5432'
+      - '--set-secrets=DB_PASSWORD=database-password:latest,JWT_SECRET=jwt-secret:latest,REFRESH_JWT_SECRET=refresh-jwt-secret:latest,GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,MIDTRANS_SERVER_KEY=midtrans-server-key:latest,MIDTRANS_CLIENT_KEY=midtrans-client-key:latest'
       - '--add-cloudsql-instances=$PROJECT_ID:$_REGION:$_INSTANCE_NAME'
       - '--service-account=eventku-sa@$PROJECT_ID.iam.gserviceaccount.com'
       - '--allow-unauthenticated'
-      - '--no-cpu-throttling'
+    waitFor: ['push-image']
 
 # ── Default substitution values ─────────────────────────────────────────────
 substitutions:

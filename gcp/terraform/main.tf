@@ -4,7 +4,7 @@
 #  Resources provisioned:
 #    - Cloud SQL PostgreSQL 16 (regional HA)
 #    - Cloud Storage bucket (static assets)
-#    - Secret Manager secrets (DB password, JWT secrets)
+#    - Secret Manager secrets (DB password, JWT, Google OAuth, Midtrans)
 #    - Artifact Registry (Docker images)
 #    - Service Account + IAM roles
 #    - Cloud Run v2 API service
@@ -47,8 +47,8 @@ provider "google" {
 }
 
 # ─── Random Passwords ────────────────────────────────────────────────────────
-# These are generated once and stored in state. For production, consider
-# using an external secret manager or Vault.
+# Auto-generated secrets. For Google OAuth and Midtrans keys, set them
+# manually via gcloud or the GCP Console after initial terraform apply.
 
 resource "random_password" "db_password" {
   length           = 24
@@ -204,6 +204,16 @@ resource "google_storage_bucket_iam_member" "assets_public_read" {
 }
 
 # ─── Secret Manager ──────────────────────────────────────────────────────────
+# Auto-generated secrets (DB password, JWT secrets) are populated by Terraform.
+# External secrets (Google OAuth, Midtrans) must be set manually:
+#
+#   gcloud secrets create google-client-id --data-file=- <<< "YOUR_CLIENT_ID"
+#   gcloud secrets create google-client-secret --data-file=- <<< "YOUR_CLIENT_SECRET"
+#   gcloud secrets create midtrans-server-key --data-file=- <<< "YOUR_SERVER_KEY"
+#   gcloud secrets create midtrans-client-key --data-file=- <<< "YOUR_CLIENT_KEY"
+#   gcloud secrets versions add google-client-id --data-file=- <<< "UPDATED_VALUE"
+
+# --- Auto-generated secrets ---
 
 resource "google_secret_manager_secret" "database_password" {
   secret_id = "database-password"
@@ -239,6 +249,36 @@ resource "google_secret_manager_secret" "refresh_jwt_secret" {
 resource "google_secret_manager_secret_version" "refresh_jwt_secret" {
   secret      = google_secret_manager_secret.refresh_jwt_secret.id
   secret_data = random_password.refresh_jwt_secret.result
+}
+
+# --- External secrets (must be set manually after terraform apply) ---
+
+resource "google_secret_manager_secret" "google_client_id" {
+  secret_id = "google-client-id"
+  replication {
+    automatic = true
+  }
+}
+
+resource "google_secret_manager_secret" "google_client_secret" {
+  secret_id = "google-client-secret"
+  replication {
+    automatic = true
+  }
+}
+
+resource "google_secret_manager_secret" "midtrans_server_key" {
+  secret_id = "midtrans-server-key"
+  replication {
+    automatic = true
+  }
+}
+
+resource "google_secret_manager_secret" "midtrans_client_key" {
+  secret_id = "midtrans-client-key"
+  replication {
+    automatic = true
+  }
 }
 
 # ─── Artifact Registry ───────────────────────────────────────────────────────
@@ -280,12 +320,16 @@ resource "google_project_iam_member" "eventku_roles" {
   member  = "serviceAccount:${google_service_account.eventku.email}"
 }
 
-# Grant SA access to each secret
+# Grant SA access to each secret (including newly added ones)
 resource "google_secret_manager_secret_iam_member" "sa_secret_access" {
   for_each = toset([
     google_secret_manager_secret.database_password.secret_id,
     google_secret_manager_secret.jwt_secret.secret_id,
     google_secret_manager_secret.refresh_jwt_secret.secret_id,
+    google_secret_manager_secret.google_client_id.secret_id,
+    google_secret_manager_secret.google_client_secret.secret_id,
+    google_secret_manager_secret.midtrans_server_key.secret_id,
+    google_secret_manager_secret.midtrans_client_key.secret_id,
   ])
 
   project   = var.project_id
@@ -368,6 +412,42 @@ resource "google_cloud_run_v2_service" "api" {
           }
         }
       }
+      env {
+        name = "GOOGLE_CLIENT_ID"
+        value_from {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.google_client_id.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "GOOGLE_CLIENT_SECRET"
+        value_from {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.google_client_secret.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "MIDTRANS_SERVER_KEY"
+        value_from {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.midtrans_server_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name = "MIDTRANS_CLIENT_KEY"
+        value_from {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.midtrans_client_key.secret_id
+            version = "latest"
+          }
+        }
+      }
 
       # Resource limits
       resources {
@@ -375,7 +455,9 @@ resource "google_cloud_run_v2_service" "api" {
           cpu    = "2"
           memory = "1Gi"
         }
-        cpu_idle = true
+        # cpu_idle = false (default) — CPU is always allocated even when idle.
+        # Required for SSE connections to stay alive without throttling.
+        # This matches the --no-cpu-throttling flag in Cloud Build deploy.
       }
 
       # Startup probe
@@ -451,6 +533,7 @@ resource "google_project_iam_member" "cloudbuild_roles" {
     "roles/iam.serviceAccountUser",
     "roles/cloudsql.client",
     "roles/artifactregistry.writer",
+    "roles/secretmanager.secretAccessor",
   ])
 
   project = var.project_id

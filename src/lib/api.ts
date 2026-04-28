@@ -1,8 +1,17 @@
 // ─── SELEEVENT API CLIENT ──────────────────────────────────────────────────
 // Centralized API endpoint constants + fetch client
 // Backend: Golang Fiber v2 (Port 8080)
-// All requests go through Caddy gateway via XTransformPort
-// Dev mode: Direct to Golang backend via XTransformPort
+//
+// Two deployment modes:
+//   1. LOCAL DEV (Caddy gateway): requests go through Caddy via XTransformPort
+//      - NEXT_PUBLIC_USE_DIRECT_BACKEND is NOT set (or 'false')
+//      - NEXT_PUBLIC_API_URL is empty or not set
+//      - URL pattern: /?XTransformPort=8080/api/v1/...
+//
+//   2. CLOUD RUN (direct backend): FE calls BE via its Cloud Run URL directly
+//      - NEXT_PUBLIC_USE_DIRECT_BACKEND=true
+//      - NEXT_PUBLIC_API_URL=https://eventku-api-xxxxx-xx.a.run.app
+//      - No Caddy proxy — FE → BE directly
 
 import type {
   ICheckTicketRequest,
@@ -22,19 +31,23 @@ import type {
 
 // ─── CONFIG ─────────────────────────────────────────────────────────────────
 
+// Cloud Run: full backend URL (e.g. https://eventku-api-xxxxx.a.run.app)
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || ''
 
-// Golang backend port (for XTransformPort gateway)
+// Local dev: Golang backend port for XTransformPort gateway (Caddy proxy)
 const GO_BACKEND_PORT = process.env.NEXT_PUBLIC_GO_PORT || '8080'
 
-// Whether to use direct Golang backend or Next.js API proxy
+// Cloud Run mode: FE calls BE directly via API_BASE URL (no Caddy)
+// Local dev mode: FE goes through Caddy XTransformPort proxy
 const USE_DIRECT_BACKEND = process.env.NEXT_PUBLIC_USE_DIRECT_BACKEND === 'true'
 
 function getBaseUrl(): string {
-  if (USE_DIRECT_BACKEND) {
-    return `/?XTransformPort=${GO_BACKEND_PORT}`
+  if (USE_DIRECT_BACKEND && API_BASE) {
+    // Cloud Run: use the full backend URL directly (no Caddy proxy)
+    return API_BASE
   }
-  return API_BASE
+  // Local dev: route through Caddy gateway via XTransformPort
+  return `/?XTransformPort=${GO_BACKEND_PORT}`
 }
 
 // ─── API ENDPOINTS (matching Golang Fiber routes.go) ──────────────────────

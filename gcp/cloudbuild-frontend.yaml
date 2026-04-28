@@ -17,7 +17,7 @@ steps:
       - |
         npm install -g bun
         echo "📦 Installing dependencies..."
-        bun install --frozen-lockfile
+        bun install
         echo "✅ Dependencies installed"
 
   # ── Build Next.js application ─────────────────────────────────────────────
@@ -36,6 +36,7 @@ steps:
         echo "   API URL: $NEXT_PUBLIC_API_URL"
         bun run build
         echo "✅ Next.js build complete"
+    waitFor: ['install-deps']
 
   # ── Build Docker image ────────────────────────────────────────────────────
   - name: 'gcr.io/cloud-builders/docker'
@@ -52,11 +53,13 @@ steps:
       - '--build-arg=NEXT_PUBLIC_GO_PORT=8080'
       - '--build-arg=NEXT_PUBLIC_USE_DIRECT_BACKEND=true'
       - '.'
+    waitFor: ['build-nextjs']
 
   # ── Push to Artifact Registry ─────────────────────────────────────────────
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-image'
     args: ['push', '--all-tags', '$_REGION-docker.pkg.dev/$PROJECT_ID/docker/eventku-web']
+    waitFor: ['build-image']
 
   # ── Deploy to Cloud Run ───────────────────────────────────────────────────
   - name: 'gcr.io/cloud-builders/gcloud'
@@ -77,6 +80,7 @@ steps:
       - '--timeout=300'
       - '--port=3000'
       - '--allow-unauthenticated'
+    waitFor: ['push-image']
 
 # ── Default substitution values ─────────────────────────────────────────────
 substitutions:

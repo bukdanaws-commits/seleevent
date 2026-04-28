@@ -3,6 +3,12 @@
 #
 #  Copy this file to terraform.tfvars and fill in your values:
 #    cp terraform.tfvars.example terraform.tfvars
+#
+#  After `terraform apply`, set external secrets manually:
+#    gcloud secrets versions add google-client-id --data-file=- <<< "YOUR_CLIENT_ID"
+#    gcloud secrets versions add google-client-secret --data-file=- <<< "YOUR_CLIENT_SECRET"
+#    gcloud secrets versions add midtrans-server-key --data-file=- <<< "YOUR_SERVER_KEY"
+#    gcloud secrets versions add midtrans-client-key --data-file=- <<< "YOUR_CLIENT_KEY"
 # =============================================================================
 
 project_id    = "eventku-494416"
