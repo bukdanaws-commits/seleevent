@@ -10,16 +10,17 @@ import (
 // ─── BASE MODELS ─────────────────────────────────────────────────────────────
 
 // BaseModel contains common fields with id, createdAt, updatedAt.
-// ID is a string UUID generated via BeforeCreate hook.
+// ID is a UUID stored as PostgreSQL native uuid type, generated via BeforeCreate hook.
 type BaseModel struct {
-	ID        string    `gorm:"primaryKey;type:text" json:"id"`
+	ID        string    `gorm:"primaryKey;type:uuid" json:"id"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"createdAt"`
 	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updatedAt"`
 }
 
 // BaseModelNoUpdate contains common fields with id and createdAt only (no updatedAt).
+// Used for append-only tables like audit_logs.
 type BaseModelNoUpdate struct {
-	ID        string    `gorm:"primaryKey;type:text" json:"id"`
+	ID        string    `gorm:"primaryKey;type:uuid" json:"id"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"createdAt"`
 }
 
@@ -45,7 +46,7 @@ type User struct {
 	GoogleID    string     `gorm:"uniqueIndex;not null" json:"googleId"`
 	Email       string     `gorm:"uniqueIndex;not null" json:"email"`
 	Name        string     `gorm:"not null" json:"name"`
-	Avatar      *string    `gorm:"type:text" json:"avatar,omitempty"`
+	Avatar      *string    `json:"avatar,omitempty"`
 	Phone       *string    `json:"phone,omitempty"`
 	Role        string     `gorm:"default:PARTICIPANT;not null" json:"role"`
 	Status      string     `gorm:"default:active;not null" json:"status"`
@@ -66,7 +67,7 @@ type Tenant struct {
 	BaseModel
 	Name           string     `gorm:"not null" json:"name"`
 	Slug           string     `gorm:"uniqueIndex;not null" json:"slug"`
-	Logo           *string    `gorm:"type:text" json:"logo,omitempty"`
+	Logo           *string    `json:"logo,omitempty"`
 	PrimaryColor   string     `gorm:"default:#00A39D;not null" json:"primaryColor"`
 	SecondaryColor string     `gorm:"default:#F8AD3C;not null" json:"secondaryColor"`
 	IsActive       bool       `gorm:"default:true;not null" json:"isActive"`
@@ -86,16 +87,16 @@ type Tenant struct {
 
 type Subscription struct {
 	BaseModel
-	TenantID             string     `gorm:"index;not null" json:"tenantId"`
-	Plan                 string     `gorm:"not null" json:"plan"`
-	Status               string     `gorm:"default:trial;not null" json:"status"`
-	CurrentPeriodStart   time.Time  `gorm:"not null" json:"currentPeriodStart"`
-	CurrentPeriodEnd     time.Time  `gorm:"not null" json:"currentPeriodEnd"`
-	CancelledAt          *time.Time `json:"cancelledAt,omitempty"`
+	TenantID           string     `gorm:"index;not null" json:"tenantId"`
+	Plan               string     `gorm:"not null" json:"plan"`
+	Status             string     `gorm:"default:trial;not null" json:"status"`
+	CurrentPeriodStart time.Time  `gorm:"not null" json:"currentPeriodStart"`
+	CurrentPeriodEnd   time.Time  `gorm:"not null" json:"currentPeriodEnd"`
+	CancelledAt        *time.Time `json:"cancelledAt,omitempty"`
 
 	// Relations
-	Tenant    Tenant    `gorm:"foreignKey:TenantID" json:"tenant,omitempty"`
-	Invoices  []Invoice `gorm:"foreignKey:SubscriptionID" json:"invoices,omitempty"`
+	Tenant   Tenant    `gorm:"foreignKey:TenantID" json:"tenant,omitempty"`
+	Invoices []Invoice `gorm:"foreignKey:SubscriptionID" json:"invoices,omitempty"`
 }
 
 // ─── INVOICE (Tenant Invoicing) ─────────────────────────────────────────────
@@ -109,7 +110,7 @@ type Invoice struct {
 	Status         string     `gorm:"default:draft;not null" json:"status"`
 	DueDate        *time.Time `json:"dueDate,omitempty"`
 	PaidAt         *time.Time `json:"paidAt,omitempty"`
-	PdfURL         *string    `gorm:"type:text" json:"pdfUrl,omitempty"`
+	PdfURL         *string    `json:"pdfUrl,omitempty"`
 
 	// Relations
 	Tenant       Tenant       `gorm:"foreignKey:TenantID" json:"tenant,omitempty"`
@@ -137,12 +138,12 @@ type Event struct {
 	TenantID  string         `gorm:"index;not null" json:"tenantId"`
 	Slug      string         `gorm:"uniqueIndex;not null" json:"slug"`
 	Title     string         `gorm:"not null" json:"title"`
-	Subtitle  *string        `gorm:"type:text" json:"subtitle,omitempty"`
+	Subtitle  *string        `json:"subtitle,omitempty"`
 	Date      time.Time      `gorm:"not null" json:"date"`
 	DoorsOpen *time.Time     `json:"doorsOpen,omitempty"`
 	Venue     string         `gorm:"not null" json:"venue"`
 	City      string         `gorm:"not null" json:"city"`
-	Address   *string        `gorm:"type:text" json:"address,omitempty"`
+	Address   *string        `json:"address,omitempty"`
 	Capacity  int            `gorm:"not null" json:"capacity"`
 	Status    string         `gorm:"index;default:draft;not null" json:"status"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deletedAt,omitempty"`
@@ -162,20 +163,20 @@ type TicketType struct {
 	TenantID    string         `gorm:"index;not null" json:"tenantId"`
 	EventID     string         `gorm:"index;not null" json:"eventId"`
 	Name        string         `gorm:"not null" json:"name"`
-	Description *string        `gorm:"type:text" json:"description,omitempty"`
+	Description *string        `json:"description,omitempty"`
 	Price       int            `gorm:"not null" json:"price"`
 	Quota       int            `gorm:"not null" json:"quota"`
 	Sold        int            `gorm:"default:0;not null" json:"sold"`
 	Tier        string         `gorm:"default:floor;not null" json:"tier"`
 	Zone        *string        `json:"zone,omitempty"`
 	Emoji       *string        `json:"emoji,omitempty"`
-	Benefits    *string        `gorm:"type:text" json:"benefits,omitempty"`
-	SeatConfig  *string        `gorm:"type:text" json:"seatConfig,omitempty"`
+	Benefits    *string        `json:"benefits,omitempty"`
+	SeatConfig  *string        `json:"seatConfig,omitempty"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deletedAt,omitempty"`
 
 	// Relations
-	Event Event  `gorm:"foreignKey:EventID" json:"event,omitempty"`
-	Seats []Seat `gorm:"foreignKey:TicketTypeID" json:"seats,omitempty"`
+	Event  Event       `gorm:"foreignKey:EventID" json:"event,omitempty"`
+	Seats  []Seat      `gorm:"foreignKey:TicketTypeID" json:"seats,omitempty"`
 	Orders []OrderItem `gorm:"foreignKey:TicketTypeID" json:"orderItems,omitempty"`
 }
 
@@ -273,7 +274,7 @@ type Counter struct {
 	TenantID string     `gorm:"index;not null" json:"tenantId"`
 	EventID  string     `gorm:"index;not null" json:"eventId"`
 	Name     string     `gorm:"not null" json:"name"`
-	Location *string    `gorm:"type:text" json:"location,omitempty"`
+	Location *string    `json:"location,omitempty"`
 	Capacity int        `gorm:"default:500;not null" json:"capacity"`
 	Status   string     `gorm:"default:inactive;not null" json:"status"`
 	OpenAt   *time.Time `json:"openAt,omitempty"`
@@ -309,7 +310,7 @@ type Gate struct {
 	EventID        string  `gorm:"index;not null" json:"eventId"`
 	Name           string  `gorm:"not null" json:"name"`
 	Type           string  `gorm:"default:entry;not null" json:"type"`
-	Location       *string `gorm:"type:text" json:"location,omitempty"`
+	Location       *string `json:"location,omitempty"`
 	MinAccessLevel *string `json:"minAccessLevel,omitempty"`
 	CapacityPerMin int     `gorm:"default:30;not null" json:"capacityPerMin"`
 	Status         string  `gorm:"default:inactive;not null" json:"status"`
@@ -347,7 +348,7 @@ type Redemption struct {
 	WristbandCode  string    `gorm:"not null" json:"wristbandCode"`
 	WristbandColor string    `gorm:"not null" json:"wristbandColor"`
 	WristbandType  string    `gorm:"not null" json:"wristbandType"`
-	Notes          *string   `gorm:"type:text" json:"notes,omitempty"`
+	Notes          *string   `json:"notes,omitempty"`
 	RedeemedAt     time.Time `gorm:"autoCreateTime" json:"redeemedAt"`
 
 	// Relations
@@ -366,7 +367,7 @@ type GateLog struct {
 	StaffID   string    `gorm:"index;not null" json:"staffId"`
 	EventID   string    `gorm:"index;not null" json:"eventId"`
 	Action    string    `gorm:"index;not null" json:"action"`
-	Notes     *string   `gorm:"type:text" json:"notes,omitempty"`
+	Notes     *string   `json:"notes,omitempty"`
 	ScannedAt time.Time `gorm:"index;autoCreateTime" json:"scannedAt"`
 
 	// Relations
@@ -392,16 +393,16 @@ type WristbandInventory struct {
 // ─── NOTIFICATION ───────────────────────────────────────────────────────────
 
 type Notification struct {
-	ID        string    `gorm:"primaryKey;type:text" json:"id"`
+	ID        string    `gorm:"primaryKey;type:uuid" json:"id"`
 	TenantID  string    `gorm:"index;not null" json:"tenantId"`
 	UserID    string    `gorm:"index;not null" json:"userId"`
 	EventID   string    `gorm:"index" json:"eventId,omitempty"`
 	Title     string    `gorm:"size:255;not null" json:"title"`
-	Message   string    `gorm:"type:text;not null" json:"message"`
-	Type      string    `gorm:"size:50;default:info;not null" json:"type"`      // info, warning, success, error
-	Category  string    `gorm:"size:50" json:"category,omitempty"`              // order, redemption, gate, system, payment
+	Message   string    `gorm:"not null" json:"message"`
+	Type      string    `gorm:"size:50;default:info;not null" json:"type"`     // info, warning, success, error
+	Category  string    `gorm:"size:50" json:"category,omitempty"`             // order, redemption, gate, system, payment
 	IsRead    bool      `gorm:"default:false;not null;index" json:"isRead"`
-	Data      string    `gorm:"type:text" json:"data,omitempty"`                // JSON string
+	Data      string    `json:"data,omitempty"`                                // JSON string
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"createdAt"`
 }
 
@@ -421,7 +422,7 @@ type AuditLog struct {
 	UserID   string  `gorm:"index;not null" json:"userId"`
 	Action   string  `gorm:"not null" json:"action"`
 	Module   string  `gorm:"index;not null" json:"module"`
-	Details  *string `gorm:"type:text" json:"details,omitempty"`
+	Details  *string `json:"details,omitempty"`
 	IP       *string `json:"ip,omitempty"`
 
 	// Relations

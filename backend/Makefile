@@ -1,4 +1,4 @@
-.PHONY: build run dev test clean tidy migrate
+.PHONY: build run dev test clean tidy migrate seed
 
 GOCMD=go
 GOBUILD=$(GOCMD) build
@@ -20,10 +20,12 @@ test:
 
 clean:
 	rm -f $(BINARY_NAME)
-	rm -f *.db
 
 tidy:
 	$(GOCMD) mod tidy
 
 migrate:
 	$(GOCMD) run ./cmd/server --migrate
+
+seed:
+	$(GOCMD) run ./cmd/seed
