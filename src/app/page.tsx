@@ -36,6 +36,7 @@ import {
   Loader2,
   ShieldCheck,
   CreditCard,
+  BookOpen,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -57,6 +58,7 @@ const PaymentStatusPage = dynamic(() => import('@/components/pages/payment-statu
 const ETicketPage = dynamic(() => import('@/components/pages/eticket-page'), { ssr: false })
 const MyOrdersPage = dynamic(() => import('@/components/pages/my-orders-page'), { ssr: false })
 const ProfilePage = dynamic(() => import('@/components/pages/profile-page'), { ssr: false })
+const UserGuidePage = dynamic(() => import('@/components/pages/user-guide-page'), { ssr: false })
 
 // ─── WRISTBAND COLOR MAPPING ───────────────────────────────
 export const WRISTBAND_COLORS: Record<string, { color: string; hex: string; label: string }> = {
@@ -1457,6 +1459,18 @@ export default function HomePage() {
 
   if (currentPage === 'profile') {
     return <ProfilePage />
+  }
+
+  if (currentPage === 'user-guide') {
+    return (
+      <main className="min-h-screen flex flex-col">
+        <Navbar />
+        <div className="flex-1">
+          <UserGuidePage />
+        </div>
+        <Footer />
+      </main>
+    )
   }
 
   // ─── Render Landing Page ───────────────────────────────

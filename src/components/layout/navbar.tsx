@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Music, Menu, Ticket, User, LogOut, ShoppingBag, ChevronDown } from 'lucide-react'
+import { Music, Menu, Ticket, User, LogOut, ShoppingBag, ChevronDown, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
 import { usePageStore } from '@/lib/page-store'
@@ -23,6 +23,8 @@ const NAV_LINKS = [
   { label: 'Venue', href: '#venue' },
   { label: 'FAQ', href: '#faq' },
 ]
+
+const GUIDE_LINK = { label: 'Panduan', page: 'user-guide' as const }
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false)
@@ -110,6 +112,13 @@ export function Navbar() {
                 {link.label}
               </button>
             ))}
+            <button
+              onClick={() => navigateTo(GUIDE_LINK.page)}
+              className="px-3.5 py-1.5 text-base font-bold text-white hover:text-[#00A39D] transition-colors duration-300 rounded-lg hover:bg-white/5 flex items-center gap-1.5"
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              {GUIDE_LINK.label}
+            </button>
           </nav>
         )}
 
@@ -211,6 +220,15 @@ export function Navbar() {
                     </button>
                   </SheetClose>
                 ))}
+                <SheetClose asChild>
+                  <button
+                    onClick={() => navigateTo(GUIDE_LINK.page)}
+                    className="w-full text-left px-3 py-2.5 text-base font-bold text-white hover:text-[#00A39D] rounded-lg hover:bg-white/5 transition-colors flex items-center gap-2.5"
+                  >
+                    <BookOpen className="h-3.5 w-3.5" />
+                    {GUIDE_LINK.label}
+                  </button>
+                </SheetClose>
 
                 {isAuthenticated ? (
                   <div className="pt-3 mt-2 border-t border-border space-y-1">

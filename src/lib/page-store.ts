@@ -8,7 +8,8 @@ export type PageView =
   | "eticket"
   | "my-orders"
   | "profile"
-  | "admin";
+  | "admin"
+  | "user-guide";
 
 interface PageState {
   currentPage: PageView;
