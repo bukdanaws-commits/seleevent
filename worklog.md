@@ -1,21 +1,37 @@
+# SeleEvent Worklog
+
 ---
 Task ID: 1
-Agent: Main Agent
-Task: Create User Guide Pages for All 6 Roles (SUPER_ADMIN, ADMIN, ORGANIZER, COUNTER_STAFF, GATE_STAFF, PARTICIPANT)
+Agent: Main Coordinator
+Task: Analyze FE↔BE↔DB connection integrity and fix all identified bugs
 
 Work Log:
-- Explored full project structure: 48 shadcn/ui components, dark theme with Gold (#F8AD3C) + Teal (#00A39D) accents, glassmorphism, glow effects
-- Created comprehensive user guide page component at `src/components/pages/user-guide-page.tsx` (~980 lines)
-- Added "user-guide" PageView to `src/lib/page-store.ts`
-- Integrated UserGuidePage into `src/app/page.tsx` with lazy loading
-- Added "Panduan" navigation link to navbar (both desktop and mobile)
-- Fixed lint errors: replaced `WristbandAmulet` (non-existent) with `CircleDot`, added missing `Music` import
-- Verified: 0 ESLint errors, dev server running on port 3000
+- Dispatched 3 parallel analysis agents: Golang BE, Next.js FE, PostgreSQL DB
+- Identified 6 critical issues, 5 medium issues
+- Dispatched 2 parallel fix agents: Golang BE fixes, FE fixes
+- All fixes applied and verified with lint check
 
 Stage Summary:
-- User Guide page with 6 role-specific guides accessible via "Panduan" in navbar
-- Each role guide includes: hero header, flow diagram, features grid, step-by-step timeline, tips & warnings, FAQ accordion
-- Role-specific color coding: SUPER_ADMIN=Red, ADMIN=Orange, ORGANIZER=Purple, COUNTER_STAFF=Emerald, GATE_STAFF=Blue, PARTICIPANT=Gray
-- Quick reference section with wristband color mapping
-- System architecture diagram (Participant → Counter → Gate → Venue)
-- All animations matching existing design: fade-in-up, scale-in, hover-lift, glassmorphism, glow effects
+- **Golang BE Fixes (7 changes)**:
+  1. go.mod: `1.25.0` → `1.24` (version consistency)
+  2. Dockerfile: `golang:1.23-alpine` → `golang:1.24-alpine` (matching go.mod)
+  3. gate_handler.go: `DATE('now')` → `CURRENT_DATE` (PostgreSQL-compatible)
+  4. order_service.go: Removed `math/rand`, replaced with `utils.GenerateOrderCode()` / `utils.GenerateTicketCode()` (crypto/rand)
+  5. order_service.go: Added TenantID to Order, OrderItem, and Ticket creation (was missing → NOT NULL violation)
+  6. order_service.go: Added EventID, EventTitle, TicketTypeName to Ticket creation in ProcessPaymentCallback
+  7. gate_service.go: Added TenantID, EventID to GateLog creation
+  8. models.go: Added `Plan` field to Tenant struct (matching SQL DDL)
+  9. models.go: Changed GateLog.StaffID from `string` to `*string` (nullable, matching SQL schema)
+  10. database.go: Excluded GateLog from AutoMigrate (partitioned table can't be managed by GORM)
+
+- **SQL DDL Fixes**:
+  1. schema.sql: Added `event_id` column to gate_logs table
+  2. schema.sql: Fixed redemptions.staff_id from NOT NULL to nullable (matches ON DELETE SET NULL)
+
+- **Frontend Fixes (3 changes)**:
+  1. package.json: Removed dead Prisma dependencies (@prisma/client, prisma, db:* scripts)
+  2. api.ts: Added 401 auto-refresh token logic (intercepts 401 → refresh → retry)
+  3. api.ts: Added CREATE_DIRECT payment endpoint + createDirectPayment method
+  4. db.ts: Fixed stale "SQLite/PostgreSQL" comment → "PostgreSQL"
+
+- **Verification**: ESLint passes with zero errors, dev server running clean

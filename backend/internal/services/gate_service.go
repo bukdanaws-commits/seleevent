@@ -123,9 +123,11 @@ func (s *GateService) ScanTicket(ticketCode, gateID, staffID, action string) (*G
         tx := s.DB.Begin()
 
         gateLog := models.GateLog{
+                TenantID:  ticket.TenantID,
                 TicketID:  ticket.ID,
                 GateID:    gateID,
-                StaffID:   staffID,
+                StaffID:   &staffID,
+                EventID:   ticket.EventID,
                 Action:    action,
                 ScannedAt: time.Now(),
         }

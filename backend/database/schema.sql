@@ -475,7 +475,7 @@ CREATE TABLE redemptions (
     tenant_id       UUID        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     ticket_id       UUID        NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
     counter_id      UUID        NOT NULL REFERENCES counters(id) ON DELETE CASCADE,
-    staff_id        UUID        NOT NULL REFERENCES users(id) ON DELETE SET NULL,
+    staff_id        UUID        REFERENCES users(id) ON DELETE SET NULL,
     wristband_code  TEXT        NOT NULL,
     wristband_color TEXT        NOT NULL,
     wristband_type  TEXT        NOT NULL,
@@ -505,6 +505,7 @@ CREATE TABLE gate_logs (
     ticket_id   UUID            NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
     gate_id     UUID            NOT NULL REFERENCES gates(id) ON DELETE CASCADE,
     staff_id    UUID            REFERENCES users(id) ON DELETE SET NULL,
+    event_id    UUID            NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     action      gate_log_action NOT NULL,
     notes       TEXT,
     scanned_at  TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -524,6 +525,7 @@ CREATE INDEX idx_gate_logs_ticket_id  ON gate_logs (ticket_id);
 CREATE INDEX idx_gate_logs_gate_id    ON gate_logs (gate_id);
 CREATE INDEX idx_gate_logs_staff_id   ON gate_logs (staff_id);
 CREATE INDEX idx_gate_logs_tenant_id  ON gate_logs (tenant_id);
+CREATE INDEX idx_gate_logs_event_id   ON gate_logs (event_id);
 CREATE INDEX idx_gate_logs_action     ON gate_logs (action);
 CREATE INDEX idx_gate_logs_scanned_at ON gate_logs (scanned_at);
 

@@ -66,6 +66,7 @@ export const API = {
   // Payment
   PAYMENT: {
     CREATE:         '/api/v1/payment/create',
+    CREATE_DIRECT:  '/api/v1/payment/create-direct',
     CALLBACK:       '/api/v1/payment/callback',
     STATUS:         (orderId: string) => `/api/v1/payment/status/${orderId}`,
   },
@@ -221,6 +222,53 @@ export async function apiFetch<T>(
 
     const json = await response.json()
 
+    // ─── 401 AUTO-REFRESH ──────────────────────────────────────────────────
+    if (response.status === 401 && getRefreshToken()) {
+      try {
+        const refreshResult = await authApi.refreshToken(getRefreshToken()!)
+        setTokens(refreshResult.accessToken, refreshResult.refreshToken)
+        // Retry the original request with new token
+        const retryHeaders: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...(customHeaders as Record<string, string>),
+          Authorization: `Bearer ${refreshResult.accessToken}`,
+        }
+        const retryResponse = await fetch(url, {
+          ...fetchOptions,
+          headers: retryHeaders,
+        })
+        const retryJson = await retryResponse.json()
+        // Process retry response
+        if (typeof retryJson.success === 'boolean') {
+          if (!retryJson.success) {
+            throw new ApiError(retryResponse.status, retryJson.error || retryJson.message || 'Request failed', retryJson)
+          }
+          if (retryJson.pagination || retryJson.meta) {
+            const rawMeta = retryJson.meta || retryJson.pagination
+            const pagination: IPagination = {
+              total: rawMeta.total ?? rawMeta.total_count ?? 0,
+              page: rawMeta.page ?? rawMeta.current_page ?? 1,
+              perPage: rawMeta.perPage ?? rawMeta.per_page ?? 20,
+              totalPages: rawMeta.totalPages ?? rawMeta.total_pages ?? 1,
+            }
+            return { data: retryJson.data, pagination } as T
+          }
+          return retryJson.data as T
+        }
+        if (!retryResponse.ok) {
+          throw new ApiError(retryResponse.status, retryJson.message || retryJson.error || `HTTP ${retryResponse.status}`, retryJson)
+        }
+        return retryJson as T
+      } catch (refreshError) {
+        // Refresh failed — clear tokens and throw
+        clearTokens()
+        if (typeof window !== 'undefined') {
+          window.location.href = '/'
+        }
+        throw new ApiError(401, 'Session expired. Please login again.')
+      }
+    }
+
     // ─── UNWRAP BACKEND RESPONSE ENVELOPE ─────────────────────────────────
     // Backend returns: { success: true, data: {...}, meta/pagination: {...} }
     //                  { success: false, error: "..." }
@@ -330,6 +378,9 @@ export const orderApi = {
 export const paymentApi = {
   createPayment: (data: ICreatePaymentRequest) =>
     apiFetch<ICreatePaymentResponse>(API.PAYMENT.CREATE, { method: 'POST', body: JSON.stringify(data) }),
+
+  createDirectPayment: (data: ICreatePaymentRequest) =>
+    apiFetch<ICreatePaymentResponse>(API.PAYMENT.CREATE_DIRECT, { method: 'POST', body: JSON.stringify(data) }),
 
   getPaymentStatus: (orderId: string) =>
     apiFetch<IPaymentStatus>(API.PAYMENT.STATUS(orderId)),

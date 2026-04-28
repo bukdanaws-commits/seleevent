@@ -4,10 +4,10 @@ import (
         "errors"
         "fmt"
         "log"
-        "math/rand"
         "time"
 
         "github.com/bukdanaws-commits/seleevent/backend/internal/models"
+        "github.com/bukdanaws-commits/seleevent/backend/pkg/utils"
         "gorm.io/gorm"
 )
 
@@ -31,24 +31,14 @@ func NewOrderService(db *gorm.DB) *OrderService {
         return &OrderService{DB: db}
 }
 
-// generateOrderCode generates a unique order code with format SEL-XXXXXXXX.
+// generateOrderCode generates a unique order code.
 func generateOrderCode() string {
-        const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-        b := make([]byte, 8)
-        for i := range b {
-                b[i] = charset[rand.Intn(len(charset))]
-        }
-        return "SEL-" + string(b)
+        return utils.GenerateOrderCode()
 }
 
-// generateTicketCode generates a unique ticket code with format TK-XXXXXXXX.
+// generateTicketCode generates a unique ticket code.
 func generateTicketCode() string {
-        const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-        b := make([]byte, 8)
-        for i := range b {
-                b[i] = charset[rand.Intn(len(charset))]
-        }
-        return "TK-" + string(b)
+        return utils.GenerateTicketCode()
 }
 
 // CreateOrder creates a new order with status "pending" and a 30-minute expiry.
@@ -93,6 +83,13 @@ func (s *OrderService) CreateOrder(userID string, eventID string, items []OrderI
                 })
         }
 
+        // Get TenantID from the event
+        var event models.Event
+        if err := s.DB.Where("id = ?", eventID).First(&event).Error; err != nil {
+                return nil, fmt.Errorf("event not found: %w", err)
+        }
+        tenantID := event.TenantID
+
         // Start transaction
         tx := s.DB.Begin()
         defer func() {
@@ -106,12 +103,13 @@ func (s *OrderService) CreateOrder(userID string, eventID string, items []OrderI
         expiresAt := time.Now().Add(30 * time.Minute)
 
         order := models.Order{
-                OrderCode:   orderCode,
-                UserID:      userID,
-                EventID:     eventID,
+                TenantID:   tenantID,
+                OrderCode:  orderCode,
+                UserID:     userID,
+                EventID:    eventID,
                 TotalAmount: totalAmount,
-                Status:      "pending",
-                ExpiresAt:   &expiresAt,
+                Status:     "pending",
+                ExpiresAt:  &expiresAt,
         }
 
         if err := tx.Create(&order).Error; err != nil {
@@ -122,6 +120,7 @@ func (s *OrderService) CreateOrder(userID string, eventID string, items []OrderI
         // Create order items
         for _, calc := range calculations {
                 orderItem := models.OrderItem{
+                        TenantID:       tenantID,
                         OrderID:       order.ID,
                         TicketTypeID:  calc.input.TicketTypeID,
                         Quantity:      calc.input.Quantity,
@@ -222,6 +221,16 @@ func (s *OrderService) ProcessPaymentCallback(orderCode string, paymentType stri
                                         var ticketType models.TicketType
                                         s.DB.Where("id = ?", item.TicketTypeID).First(&ticketType)
 
+                                        // Get event title and ticket type name for denormalized fields
+                                        eventTitle := order.Event.Title
+                                        if order.Event.ID == "" {
+                                                // Load event if not preloaded
+                                                var evt models.Event
+                                                s.DB.Where("id = ?", order.EventID).First(&evt)
+                                                eventTitle = evt.Title
+                                        }
+                                        ticketTypeName := ticketType.Name
+
                                         var seatLabel *string
                                         if ticketType.SeatConfig != nil {
                                                 zone := "Z"
@@ -233,14 +242,18 @@ func (s *OrderService) ProcessPaymentCallback(orderCode string, paymentType stri
                                         }
 
                                         ticket := models.Ticket{
+                                                TenantID:       order.TenantID,
                                                 OrderID:       order.ID,
                                                 TicketTypeID:  item.TicketTypeID,
+                                                EventID:       order.EventID,
                                                 TicketCode:    ticketCode,
                                                 AttendeeName:  attendeeName,
                                                 AttendeeEmail: attendeeEmail,
                                                 QrData:        qrData,
                                                 Status:        "active",
                                                 SeatLabel:     seatLabel,
+                                                EventTitle:    eventTitle,
+                                                TicketTypeName: ticketTypeName,
                                         }
                                         if err := tx.Create(&ticket).Error; err != nil {
                                                 tx.Rollback()
