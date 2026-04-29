@@ -15,27 +15,27 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;  -- gen_random_uuid()
 
 -- ─── Enumerated Types ────────────────────────────────────────────────────────
 
-CREATE TYPE user_role AS ENUM (
+CREATE TYPE IF NOT EXISTS user_role AS ENUM (
     'SUPER_ADMIN', 'ADMIN', 'ORGANIZER', 'COUNTER_STAFF', 'GATE_STAFF', 'PARTICIPANT'
 );
 
-CREATE TYPE user_status AS ENUM ('active', 'inactive', 'banned');
+CREATE TYPE IF NOT EXISTS user_status AS ENUM ('active', 'inactive', 'banned');
 
-CREATE TYPE event_status AS ENUM ('draft', 'published', 'ongoing', 'completed', 'cancelled');
+CREATE TYPE IF NOT EXISTS event_status AS ENUM ('draft', 'published', 'ongoing', 'completed', 'cancelled');
 
-CREATE TYPE order_status AS ENUM ('pending', 'paid', 'cancelled', 'expired', 'refunded');
+CREATE TYPE IF NOT EXISTS order_status AS ENUM ('pending', 'paid', 'cancelled', 'expired', 'refunded');
 
-CREATE TYPE ticket_status AS ENUM (
+CREATE TYPE IF NOT EXISTS ticket_status AS ENUM (
     'pending', 'active', 'redeemed', 'inside', 'outside', 'cancelled', 'expired'
 );
 
-CREATE TYPE gate_type AS ENUM ('entry', 'exit', 'both');
+CREATE TYPE IF NOT EXISTS gate_type AS ENUM ('entry', 'exit', 'both');
 
-CREATE TYPE gate_log_action AS ENUM ('entry', 'exit', 'denied', 'error');
+CREATE TYPE IF NOT EXISTS gate_log_action AS ENUM ('entry', 'exit', 'denied', 'error');
 
-CREATE TYPE subscription_status AS ENUM ('trial', 'active', 'past_due', 'cancelled', 'expired');
+CREATE TYPE IF NOT EXISTS subscription_status AS ENUM ('trial', 'active', 'past_due', 'cancelled', 'expired');
 
-CREATE TYPE invoice_status AS ENUM ('draft', 'issued', 'paid', 'void', 'uncollectible');
+CREATE TYPE IF NOT EXISTS invoice_status AS ENUM ('draft', 'issued', 'paid', 'void', 'uncollectible');
 
 -- ============================================================================
 -- 1. TENANTS
@@ -44,7 +44,7 @@ CREATE TYPE invoice_status AS ENUM ('draft', 'issued', 'paid', 'void', 'uncollec
 -- Includes branding fields (logo, primary_color, secondary_color) from EXISTING
 -- and plan limits (max_events, max_tickets) from EXISTING.
 
-CREATE TABLE tenants (
+CREATE TABLE IF NOT EXISTS tenants (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name            TEXT        NOT NULL,
     slug            TEXT        NOT NULL,
@@ -69,7 +69,7 @@ COMMENT ON TABLE tenants IS 'SaaS multi-tenant organisations that host events.';
 -- ============================================================================
 -- SaaS billing per tenant (from NEW schema).
 
-CREATE TABLE subscriptions (
+CREATE TABLE IF NOT EXISTS subscriptions (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id       UUID            NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     plan            TEXT            NOT NULL,           -- free / pro / enterprise
@@ -84,7 +84,7 @@ CREATE TABLE subscriptions (
 );
 
 -- Partial unique index: only one active (non-cancelled) subscription per tenant
-CREATE UNIQUE INDEX uq_subscriptions_tenant_active ON subscriptions (tenant_id)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_subscriptions_tenant_active ON subscriptions (tenant_id)
     WHERE cancelled_at IS NULL;
 
 COMMENT ON TABLE subscriptions IS 'SaaS billing subscriptions — one active subscription per tenant.';
@@ -94,7 +94,7 @@ COMMENT ON TABLE subscriptions IS 'SaaS billing subscriptions — one active sub
 -- ============================================================================
 -- Tenant invoicing (from NEW schema).
 
-CREATE TABLE invoices (
+CREATE TABLE IF NOT EXISTS invoices (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id       UUID            NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     subscription_id UUID            REFERENCES subscriptions(id) ON DELETE SET NULL,
@@ -118,7 +118,7 @@ COMMENT ON TABLE invoices IS 'Tenant invoicing records for SaaS billing.';
 -- System users with Google OAuth login, RBAC roles, and status lifecycle
 -- (from EXISTING schema).
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     google_id       TEXT            NOT NULL,
     email           TEXT            NOT NULL,
@@ -142,7 +142,7 @@ COMMENT ON TABLE users IS 'System users — Google OAuth login, RBAC roles, stat
 -- ============================================================================
 -- User ↔ Tenant membership with per-tenant role override.
 
-CREATE TABLE tenant_users (
+CREATE TABLE IF NOT EXISTS tenant_users (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     tenant_id   UUID        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -163,7 +163,7 @@ COMMENT ON TABLE tenant_users IS 'User–Tenant membership with per-tenant role 
 -- Event listings with slug, subtitle, doors_open, city, address, capacity
 -- (from EXISTING) plus tenant_id, soft delete (from NEW).
 
-CREATE TABLE events (
+CREATE TABLE IF NOT EXISTS events (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id       UUID            NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     slug            TEXT            NOT NULL,
@@ -184,10 +184,10 @@ CREATE TABLE events (
     CONSTRAINT chk_events_capacity   CHECK (capacity > 0)
 );
 
-CREATE INDEX idx_events_tenant_id    ON events (tenant_id);
-CREATE INDEX idx_events_status       ON events (status);
-CREATE INDEX idx_events_date         ON events (date);
-CREATE INDEX idx_events_deleted_at   ON events (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_events_tenant_id    ON events (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_events_status       ON events (status);
+CREATE INDEX IF NOT EXISTS idx_events_date         ON events (date);
+CREATE INDEX IF NOT EXISTS idx_events_deleted_at   ON events (deleted_at);
 
 COMMENT ON TABLE events IS 'Event listings — multi-tenant, soft-deletable, with full venue info.';
 
@@ -197,7 +197,7 @@ COMMENT ON TABLE events IS 'Event listings — multi-tenant, soft-deletable, wit
 -- Ticket categories with description, tier, zone, emoji, benefits, seat_config
 -- (from EXISTING) plus tenant_id, soft delete, CHECK constraint (from NEW).
 
-CREATE TABLE ticket_types (
+CREATE TABLE IF NOT EXISTS ticket_types (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id       UUID        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     event_id        UUID        NOT NULL REFERENCES events(id) ON DELETE CASCADE,
@@ -221,9 +221,9 @@ CREATE TABLE ticket_types (
     CONSTRAINT chk_ticket_types_price  CHECK (price >= 0)
 );
 
-CREATE INDEX idx_ticket_types_event_id   ON ticket_types (event_id);
-CREATE INDEX idx_ticket_types_tenant_id  ON ticket_types (tenant_id);
-CREATE INDEX idx_ticket_types_deleted_at ON ticket_types (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_ticket_types_event_id   ON ticket_types (event_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_types_tenant_id  ON ticket_types (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_types_deleted_at ON ticket_types (deleted_at);
 
 COMMENT ON TABLE ticket_types IS 'Ticket categories per event — tiered pricing, quotas, seat config, soft-deletable.';
 
@@ -234,7 +234,7 @@ COMMENT ON TABLE ticket_types IS 'Ticket categories per event — tiered pricing
 -- Only for VVIP, VIP, CAT1–CAT6 ticket types.
 -- Festival / free-standing tickets do NOT reference this table.
 
-CREATE TABLE seats (
+CREATE TABLE IF NOT EXISTS seats (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id       UUID        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     event_id        UUID        NOT NULL REFERENCES events(id) ON DELETE CASCADE,
@@ -250,10 +250,10 @@ CREATE TABLE seats (
     CONSTRAINT uq_seats_event_section_row_number UNIQUE (event_id, section, row, number)
 );
 
-CREATE INDEX idx_seats_event_id        ON seats (event_id);
-CREATE INDEX idx_seats_ticket_type_id  ON seats (ticket_type_id);
-CREATE INDEX idx_seats_tenant_id       ON seats (tenant_id);
-CREATE INDEX idx_seats_status          ON seats (status);
+CREATE INDEX IF NOT EXISTS idx_seats_event_id        ON seats (event_id);
+CREATE INDEX IF NOT EXISTS idx_seats_ticket_type_id  ON seats (ticket_type_id);
+CREATE INDEX IF NOT EXISTS idx_seats_tenant_id       ON seats (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_seats_status          ON seats (status);
 
 COMMENT ON TABLE seats IS 'Assigned seating master — only for VVIP, VIP, CAT1–CAT6. Festival/standing tickets have no seat assignment.';
 
@@ -264,7 +264,7 @@ COMMENT ON TABLE seats IS 'Assigned seating master — only for VVIP, VIP, CAT1�
 -- midtrans_transaction_id, expires_at (from EXISTING) plus tenant_id,
 -- soft delete, CHECK constraint (from NEW).
 
-CREATE TABLE orders (
+CREATE TABLE IF NOT EXISTS orders (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id               UUID            NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     order_code              TEXT            NOT NULL,
@@ -288,11 +288,11 @@ CREATE TABLE orders (
     CONSTRAINT chk_orders_platform_fee            CHECK (platform_fee >= 0)
 );
 
-CREATE INDEX idx_orders_user_id     ON orders (user_id);
-CREATE INDEX idx_orders_event_id    ON orders (event_id);
-CREATE INDEX idx_orders_tenant_id   ON orders (tenant_id);
-CREATE INDEX idx_orders_status      ON orders (status);
-CREATE INDEX idx_orders_deleted_at  ON orders (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_orders_user_id     ON orders (user_id);
+CREATE INDEX IF NOT EXISTS idx_orders_event_id    ON orders (event_id);
+CREATE INDEX IF NOT EXISTS idx_orders_tenant_id   ON orders (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_orders_status      ON orders (status);
+CREATE INDEX IF NOT EXISTS idx_orders_deleted_at  ON orders (deleted_at);
 
 COMMENT ON TABLE orders IS 'Purchase orders — Midtrans payment integration, booking reference codes, order timeout, soft-deletable.';
 
@@ -301,7 +301,7 @@ COMMENT ON TABLE orders IS 'Purchase orders — Midtrans payment integration, bo
 -- ============================================================================
 -- Order line items — each row is one ticket-type × quantity.
 
-CREATE TABLE order_items (
+CREATE TABLE IF NOT EXISTS order_items (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id       UUID        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     order_id        UUID        NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
@@ -318,9 +318,9 @@ CREATE TABLE order_items (
     CONSTRAINT chk_order_items_math     CHECK (subtotal = quantity * price_per_ticket)
 );
 
-CREATE INDEX idx_order_items_order_id       ON order_items (order_id);
-CREATE INDEX idx_order_items_ticket_type_id ON order_items (ticket_type_id);
-CREATE INDEX idx_order_items_tenant_id      ON order_items (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_order_items_order_id       ON order_items (order_id);
+CREATE INDEX IF NOT EXISTS idx_order_items_ticket_type_id ON order_items (ticket_type_id);
+CREATE INDEX IF NOT EXISTS idx_order_items_tenant_id      ON order_items (tenant_id);
 
 COMMENT ON TABLE order_items IS 'Order line items — one row per ticket-type × quantity.';
 
@@ -333,7 +333,7 @@ COMMENT ON TABLE order_items IS 'Order line items — one row per ticket-type ×
 -- (from EXISTING) plus tenant_id, seat_id FK (NEW), denormalized fields
 -- (event_title, ticket_type_name), unique_event_seat constraint.
 
-CREATE TABLE tickets (
+CREATE TABLE IF NOT EXISTS tickets (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id         UUID            NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     order_id          UUID            NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
@@ -360,14 +360,14 @@ CREATE TABLE tickets (
     CONSTRAINT uq_event_seat              UNIQUE (event_id, seat_label)  -- one ticket per seat per event
 );
 
-CREATE INDEX idx_tickets_order_id        ON tickets (order_id);
-CREATE INDEX idx_tickets_ticket_type_id  ON tickets (ticket_type_id);
-CREATE INDEX idx_tickets_event_id        ON tickets (event_id);
-CREATE INDEX idx_tickets_seat_id         ON tickets (seat_id);
-CREATE INDEX idx_tickets_tenant_id       ON tickets (tenant_id);
-CREATE INDEX idx_tickets_status          ON tickets (status);
-CREATE INDEX idx_tickets_attendee_email  ON tickets (attendee_email);
-CREATE INDEX idx_tickets_wristband_code  ON tickets (wristband_code) WHERE wristband_code IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_tickets_order_id        ON tickets (order_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_ticket_type_id  ON tickets (ticket_type_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_event_id        ON tickets (event_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_seat_id         ON tickets (seat_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_tenant_id       ON tickets (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_status          ON tickets (status);
+CREATE INDEX IF NOT EXISTS idx_tickets_attendee_email  ON tickets (attendee_email);
+CREATE INDEX IF NOT EXISTS idx_tickets_wristband_code  ON tickets (wristband_code) WHERE wristband_code IS NOT NULL;
 
 COMMENT ON TABLE tickets IS 'Individual tickets — full lifecycle (pending→active→redeemed→inside↔outside→cancelled/expired), seat assignment via FK, QR/wristband tracking, denormalized event/title.';
 
@@ -376,7 +376,7 @@ COMMENT ON TABLE tickets IS 'Individual tickets — full lifecycle (pending→ac
 -- ============================================================================
 -- Wristband redemption booths (from EXISTING schema).
 
-CREATE TABLE counters (
+CREATE TABLE IF NOT EXISTS counters (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id   UUID        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     event_id    UUID        NOT NULL REFERENCES events(id) ON DELETE CASCADE,
@@ -392,8 +392,8 @@ CREATE TABLE counters (
     CONSTRAINT chk_counters_capacity CHECK (capacity > 0)
 );
 
-CREATE INDEX idx_counters_event_id   ON counters (event_id);
-CREATE INDEX idx_counters_tenant_id  ON counters (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_counters_event_id   ON counters (event_id);
+CREATE INDEX IF NOT EXISTS idx_counters_tenant_id  ON counters (tenant_id);
 
 COMMENT ON TABLE counters IS 'Wristband redemption booths — where participants exchange tickets for wristbands.';
 
@@ -402,7 +402,7 @@ COMMENT ON TABLE counters IS 'Wristband redemption booths — where participants
 -- ============================================================================
 -- Staff assignments to counters (from EXISTING schema).
 
-CREATE TABLE counter_staff (
+CREATE TABLE IF NOT EXISTS counter_staff (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id   UUID        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -416,8 +416,8 @@ CREATE TABLE counter_staff (
     CONSTRAINT uq_counter_staff_user_counter UNIQUE (user_id, counter_id)
 );
 
-CREATE INDEX idx_counter_staff_counter_id ON counter_staff (counter_id);
-CREATE INDEX idx_counter_staff_tenant_id  ON counter_staff (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_counter_staff_counter_id ON counter_staff (counter_id);
+CREATE INDEX IF NOT EXISTS idx_counter_staff_tenant_id  ON counter_staff (tenant_id);
 
 COMMENT ON TABLE counter_staff IS 'Staff assignments to wristband redemption counters.';
 
@@ -426,7 +426,7 @@ COMMENT ON TABLE counter_staff IS 'Staff assignments to wristband redemption cou
 -- ============================================================================
 -- Entry/exit points (from EXISTING schema).
 
-CREATE TABLE gates (
+CREATE TABLE IF NOT EXISTS gates (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id         UUID    NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     event_id          UUID    NOT NULL REFERENCES events(id) ON DELETE CASCADE,
@@ -442,8 +442,8 @@ CREATE TABLE gates (
     CONSTRAINT chk_gates_capacity_per_min CHECK (capacity_per_min > 0)
 );
 
-CREATE INDEX idx_gates_event_id   ON gates (event_id);
-CREATE INDEX idx_gates_tenant_id  ON gates (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_gates_event_id   ON gates (event_id);
+CREATE INDEX IF NOT EXISTS idx_gates_tenant_id  ON gates (tenant_id);
 
 COMMENT ON TABLE gates IS 'Entry/exit points at the venue — typed as entry, exit, or both.';
 
@@ -452,7 +452,7 @@ COMMENT ON TABLE gates IS 'Entry/exit points at the venue — typed as entry, ex
 -- ============================================================================
 -- Staff assignments to gates (from EXISTING schema).
 
-CREATE TABLE gate_staff (
+CREATE TABLE IF NOT EXISTS gate_staff (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id   UUID        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -466,8 +466,8 @@ CREATE TABLE gate_staff (
     CONSTRAINT uq_gate_staff_user_gate UNIQUE (user_id, gate_id)
 );
 
-CREATE INDEX idx_gate_staff_gate_id    ON gate_staff (gate_id);
-CREATE INDEX idx_gate_staff_tenant_id  ON gate_staff (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_gate_staff_gate_id    ON gate_staff (gate_id);
+CREATE INDEX IF NOT EXISTS idx_gate_staff_tenant_id  ON gate_staff (tenant_id);
 
 COMMENT ON TABLE gate_staff IS 'Staff assignments to entry/exit gates.';
 
@@ -476,7 +476,7 @@ COMMENT ON TABLE gate_staff IS 'Staff assignments to entry/exit gates.';
 -- ============================================================================
 -- Ticket → wristband exchange records (from EXISTING schema).
 
-CREATE TABLE redemptions (
+CREATE TABLE IF NOT EXISTS redemptions (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id       UUID        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     ticket_id       UUID        NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
@@ -493,9 +493,9 @@ CREATE TABLE redemptions (
     CONSTRAINT uq_redemptions_wristband_code UNIQUE (wristband_code)
 );
 
-CREATE INDEX idx_redemptions_counter_id    ON redemptions (counter_id);
-CREATE INDEX idx_redemptions_staff_id      ON redemptions (staff_id);
-CREATE INDEX idx_redemptions_tenant_id     ON redemptions (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_redemptions_counter_id    ON redemptions (counter_id);
+CREATE INDEX IF NOT EXISTS idx_redemptions_staff_id      ON redemptions (staff_id);
+CREATE INDEX IF NOT EXISTS idx_redemptions_tenant_id     ON redemptions (tenant_id);
 
 COMMENT ON TABLE redemptions IS 'Ticket-to-wristband exchange records — one redemption per ticket.';
 
@@ -505,7 +505,7 @@ COMMENT ON TABLE redemptions IS 'Ticket-to-wristband exchange records — one re
 -- Entry/exit tracking, PARTITION BY RANGE on scanned_at (from NEW schema).
 -- Default partition for out-of-range data + partition for 2026-04.
 
-CREATE TABLE gate_logs (
+CREATE TABLE IF NOT EXISTS gate_logs (
     id          UUID            NOT NULL,
     tenant_id   UUID            NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     ticket_id   UUID            NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
@@ -535,13 +535,13 @@ CREATE TABLE gate_logs_2026_06 PARTITION OF gate_logs
 -- Default partition for any out-of-range data
 CREATE TABLE gate_logs_default PARTITION OF gate_logs DEFAULT;
 
-CREATE INDEX idx_gate_logs_ticket_id  ON gate_logs (ticket_id);
-CREATE INDEX idx_gate_logs_gate_id    ON gate_logs (gate_id);
-CREATE INDEX idx_gate_logs_staff_id   ON gate_logs (staff_id);
-CREATE INDEX idx_gate_logs_tenant_id  ON gate_logs (tenant_id);
-CREATE INDEX idx_gate_logs_event_id   ON gate_logs (event_id);
-CREATE INDEX idx_gate_logs_action     ON gate_logs (action);
-CREATE INDEX idx_gate_logs_scanned_at ON gate_logs (scanned_at);
+CREATE INDEX IF NOT EXISTS idx_gate_logs_ticket_id  ON gate_logs (ticket_id);
+CREATE INDEX IF NOT EXISTS idx_gate_logs_gate_id    ON gate_logs (gate_id);
+CREATE INDEX IF NOT EXISTS idx_gate_logs_staff_id   ON gate_logs (staff_id);
+CREATE INDEX IF NOT EXISTS idx_gate_logs_tenant_id  ON gate_logs (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_gate_logs_event_id   ON gate_logs (event_id);
+CREATE INDEX IF NOT EXISTS idx_gate_logs_action     ON gate_logs (action);
+CREATE INDEX IF NOT EXISTS idx_gate_logs_scanned_at ON gate_logs (scanned_at);
 
 COMMENT ON TABLE gate_logs IS 'Entry/exit tracking — partitioned by scanned_at for high-throughput gate scanning.';
 
@@ -550,7 +550,7 @@ COMMENT ON TABLE gate_logs IS 'Entry/exit tracking — partitioned by scanned_at
 -- ============================================================================
 -- Wristband stock with color_hex, remaining_stock (from EXISTING).
 
-CREATE TABLE wristband_inventories (
+CREATE TABLE IF NOT EXISTS wristband_inventories (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id        UUID    NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     event_id         UUID    NOT NULL REFERENCES events(id) ON DELETE CASCADE,
@@ -570,8 +570,8 @@ CREATE TABLE wristband_inventories (
     CONSTRAINT chk_wristband_inv_used_le_total CHECK (used_stock <= total_stock)
 );
 
-CREATE INDEX idx_wristband_inv_event_id  ON wristband_inventories (event_id);
-CREATE INDEX idx_wristband_inv_tenant_id ON wristband_inventories (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_wristband_inv_event_id  ON wristband_inventories (event_id);
+CREATE INDEX IF NOT EXISTS idx_wristband_inv_tenant_id ON wristband_inventories (tenant_id);
 
 COMMENT ON TABLE wristband_inventories IS 'Wristband stock per event/color — tracks total, used, and remaining quantities.';
 
@@ -580,7 +580,7 @@ COMMENT ON TABLE wristband_inventories IS 'Wristband stock per event/color — t
 -- ============================================================================
 -- User notifications with event_id, category, data (from EXISTING).
 
-CREATE TABLE notifications (
+CREATE TABLE IF NOT EXISTS notifications (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id   UUID        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -594,11 +594,11 @@ CREATE TABLE notifications (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_notifications_user_id   ON notifications (user_id);
-CREATE INDEX idx_notifications_tenant_id ON notifications (tenant_id);
-CREATE INDEX idx_notifications_is_read   ON notifications (is_read);
-CREATE INDEX idx_notifications_event_id  ON notifications (event_id);
-CREATE INDEX idx_notifications_created_at ON notifications (created_at);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id   ON notifications (user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_tenant_id ON notifications (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_is_read   ON notifications (is_read);
+CREATE INDEX IF NOT EXISTS idx_notifications_event_id  ON notifications (event_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications (created_at);
 
 COMMENT ON TABLE notifications IS 'User notifications — per-tenant, categorised, with optional JSON data payload.';
 
@@ -607,7 +607,7 @@ COMMENT ON TABLE notifications IS 'User notifications — per-tenant, categorise
 -- ============================================================================
 -- System audit trail — append-only (no updated_at).
 
-CREATE TABLE audit_logs (
+CREATE TABLE IF NOT EXISTS audit_logs (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id   UUID    NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     user_id     UUID    NOT NULL REFERENCES users(id) ON DELETE SET NULL,
@@ -618,10 +618,10 @@ CREATE TABLE audit_logs (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_audit_logs_user_id    ON audit_logs (user_id);
-CREATE INDEX idx_audit_logs_tenant_id  ON audit_logs (tenant_id);
-CREATE INDEX idx_audit_logs_module     ON audit_logs (module);
-CREATE INDEX idx_audit_logs_created_at ON audit_logs (created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id    ON audit_logs (user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant_id  ON audit_logs (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_module     ON audit_logs (module);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs (created_at);
 
 COMMENT ON TABLE audit_logs IS 'Append-only system audit trail — tracks all sensitive operations.';
 
@@ -712,7 +712,7 @@ CREATE TRIGGER trg_wristband_inventories_stock
 -- violations at query time.
 
 -- Partial index to quickly find seated tickets missing a seat assignment
-CREATE INDEX idx_tickets_seated_missing_seat
+CREATE INDEX IF NOT EXISTS idx_tickets_seated_missing_seat
     ON tickets (id)
     WHERE seat_id IS NULL
       AND ticket_type_name NOT IN ('Festival');
@@ -721,12 +721,12 @@ CREATE INDEX idx_tickets_seated_missing_seat
 -- Schema version tracking
 -- ============================================================================
 
-CREATE TABLE schema_migrations (
+CREATE TABLE IF NOT EXISTS schema_migrations (
     version     TEXT PRIMARY KEY,
     applied_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO schema_migrations (version) VALUES ('001_hybrid_initial');
+INSERT INTO schema_migrations (version) VALUES ('001_hybrid_initial') ON CONFLICT (version) DO NOTHING;
 
 -- ============================================================================
 -- END OF SCHEMA
