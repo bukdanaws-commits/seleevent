@@ -487,12 +487,13 @@ resource "google_cloud_run_v2_service" "api" {
         # This matches the --no-cpu-throttling flag in Cloud Build deploy.
       }
 
-      # Startup probe
+      # Startup probe — must allow enough time for DB retry logic
+      # (up to 10 retries with exponential backoff, ~180s worst case)
       startup_probe {
-        initial_delay_seconds = 5
-        timeout_seconds       = 3
+        initial_delay_seconds = 10
+        timeout_seconds       = 5
         period_seconds        = 10
-        failure_threshold     = 6
+        failure_threshold     = 24  # 10s + 10s*24 = 250s total, covers DB retry loop
         http_get {
           path = "/health"
         }
@@ -511,6 +512,9 @@ resource "google_cloud_run_v2_service" "api" {
 
     # Cloud SQL connection (Unix socket via built-in Cloud SQL Auth Proxy)
     # No VPC connector needed — Cloud SQL sidecar handles /cloudsql/ paths
+    # CRITICAL: Without this field, the /cloudsql/ socket is never mounted,
+    # and the backend cannot connect to the database → 503 Service Unavailable.
+    cloud_sql_instances = [google_sql_database_instance.default.connection_name]
 
     scaling {
       # Single instance for SSE consistency (broadcast is in-memory per-instance)
