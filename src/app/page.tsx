@@ -1341,22 +1341,38 @@ export default function HomePage() {
   useEffect(() => {
     async function fetchEventData() {
       try {
-        const response = await publicApi.getEventBySlug('sheila-on7-jakarta')
-        if (response && typeof response === 'object' && 'event' in response) {
-          const event = (response as { event: Record<string, unknown> }).event
-          if (event) {
-            setEventData(prev => ({
-              ...prev,
-              id: (event.id as string) || prev.id,
-              slug: (event.slug as string) || prev.slug,
-              title: (event.title as string) || prev.title,
-              subtitle: (event.subtitle as string) || prev.subtitle,
-              date: (event.date as string) || prev.date,
-              venue: (event.venue as string) || prev.venue,
-              city: (event.city as string) || prev.city,
-              capacity: (event.capacity as number) || prev.capacity,
-              status: (event.status as 'published' | 'draft' | 'sold_out') || prev.status,
+        // apiFetch unwraps the backend envelope { success, data } → returns data directly
+        // Backend GetEventBySlug preloads TicketTypes, so we get both in one call
+        const event = await publicApi.getEventBySlug('sheila-on7-jakarta')
+        if (event && typeof event === 'object' && 'id' in event) {
+          setEventData(prev => ({
+            ...prev,
+            id: (event.id as string) || prev.id,
+            slug: (event.slug as string) || prev.slug,
+            title: (event.title as string) || prev.title,
+            subtitle: (event.subtitle as string) || prev.subtitle,
+            date: (event.date as string) || prev.date,
+            venue: (event.venue as string) || prev.venue,
+            city: (event.city as string) || prev.city,
+            capacity: (event.capacity as number) || prev.capacity,
+            status: (event.status as 'published' | 'draft' | 'sold_out') || prev.status,
+          }))
+
+          // Extract ticket types from the event response (preloaded by backend)
+          const ticketTypesData = event.ticketTypes
+          if (Array.isArray(ticketTypesData) && ticketTypesData.length > 0) {
+            const apiTickets: TicketTypeDisplay[] = ticketTypesData.map((tt: Record<string, unknown>) => ({
+              id: (tt.id as string) || '',
+              name: (tt.name as string) || '',
+              description: (tt.description as string) || '',
+              price: (tt.price as number) || 0,
+              quota: (tt.quota as number) || 0,
+              sold: (tt.sold as number) || 0,
+              tier: ((tt.tier as string) === 'tribun' ? 'tribun' : 'floor') as 'floor' | 'tribun',
+              emoji: (tt.emoji as string) || '🎟️',
+              benefits: Array.isArray(tt.benefits) ? (tt.benefits as string[]) : [],
             }))
+            setTicketTypes(apiTickets)
           }
         }
       } catch {
@@ -1364,30 +1380,7 @@ export default function HomePage() {
       }
     }
 
-    async function fetchTicketTypes() {
-      try {
-        const response = await publicApi.getTicketTypes(FALLBACK_EVENT.id)
-        if (Array.isArray(response) && response.length > 0) {
-          const apiTickets: TicketTypeDisplay[] = response.map((tt: Record<string, unknown>) => ({
-            id: (tt.id as string) || '',
-            name: (tt.name as string) || '',
-            description: (tt.description as string) || '',
-            price: (tt.price as number) || 0,
-            quota: (tt.quota as number) || 0,
-            sold: (tt.sold as number) || 0,
-            tier: ((tt.tier as string) === 'tribun' ? 'tribun' : 'floor') as 'floor' | 'tribun',
-            emoji: (tt.emoji as string) || '🎟️',
-            benefits: Array.isArray(tt.benefits) ? (tt.benefits as string[]) : [],
-          }))
-          setTicketTypes(apiTickets)
-        }
-      } catch {
-        // Silently use fallback data
-      }
-    }
-
     fetchEventData()
-    fetchTicketTypes()
   }, [])
 
   // ─── Login handler ─────────────────────────────────────

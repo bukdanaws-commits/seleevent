@@ -376,7 +376,7 @@ export const publicApi = {
     apiFetch<unknown[]>(API.PUBLIC.EVENTS, { params }),
 
   getEventBySlug: (slug: string) =>
-    apiFetch<{ event: unknown }>(API.PUBLIC.EVENT_DETAIL(slug)),
+    apiFetch<Record<string, unknown>>(API.PUBLIC.EVENT_DETAIL(slug)),
 
   getTicketTypes: (eventId: string) =>
     apiFetch<unknown[]>(API.PUBLIC.TICKET_TYPES(eventId)),

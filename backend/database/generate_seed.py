@@ -405,10 +405,12 @@ TICKET_DISTRIBUTION = {
     2: {'active': 15, 'pending': 2, 'redeemed': 5, 'inside': 3, 'outside': 2, 'cancelled': 3, 'expired': 3},
 }
 
-def gen_seat_label(tt_name, zone, row_num=None, seat_num=None):
+def gen_seat_label(tt_name, zone, row_num=None, seat_num=None, festival_idx=None):
     """Generate a seat label based on ticket type."""
     if tt_name == 'Festival':
-        return 'Festival'
+        # Festival is general admission (no assigned seats), but uq_event_seat
+        # requires unique (event_id, seat_label). Use indexed labels.
+        return f'Festival-{festival_idx:04d}' if festival_idx is not None else 'Festival-0000'
     return f"{tt_name}-{zone}-{row_num}-{seat_num}"
 
 # Track used wristband codes
@@ -488,6 +490,8 @@ def gen_tickets_for_event(event_short_id, distribution, event_orders):
     seat_counters = {}  # tt_short_id -> next_row
     for tt in event_tts:
         seat_counters[tt['short_id']] = 1
+    festival_counter = {}  # event_short_id -> next festival index
+    festival_counter[event_short_id] = 1
 
     # Staff IDs for redemptions
     counter_staff_ids = [10, 11, 12]
@@ -550,7 +554,8 @@ def gen_tickets_for_event(event_short_id, distribution, event_orders):
         tt_name = tt['name']
         zone = tt['zone']
         if tt_name == 'Festival':
-            seat_label = 'Festival'
+            seat_label = gen_seat_label(tt_name, zone, festival_idx=festival_counter[event_short_id])
+            festival_counter[event_short_id] += 1
         else:
             row = seat_counters[tt_short] // 20 + 1
             seat_num = seat_counters[tt_short] % 20 + 1
