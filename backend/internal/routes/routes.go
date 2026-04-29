@@ -150,6 +150,23 @@ func Setup(app *fiber.App, db *gorm.DB, hub *services.SSEHub) {
         admin.Patch("/tickets/:ticketId/cancel", handlers.CancelTicket(db))
         admin.Post("/tickets/expire-pending", handlers.ExpirePendingTickets(db))
 
+        // Events CRUD
+        admin.Post("/events", handlers.CreateEvent(db))
+        admin.Get("/events/:id", handlers.GetEventDetail(db))
+        admin.Put("/events/:id", handlers.UpdateEvent(db))
+        admin.Delete("/events/:id", handlers.DeleteEvent(db))
+
+        // Ticket Types CRUD
+        admin.Post("/events/:eventId/ticket-types", handlers.CreateTicketType(db))
+        admin.Put("/ticket-types/:id", handlers.UpdateTicketType(db))
+        admin.Delete("/ticket-types/:id", handlers.DeleteTicketType(db))
+
+        // Tenant Management (SUPER_ADMIN only)
+        tenantAdmin := auth.Group("/admin/tenants", middleware.RoleRequired("SUPER_ADMIN"))
+        tenantAdmin.Get("/", handlers.GetTenants(db))
+        tenantAdmin.Get("/:id", handlers.GetTenantDetail(db))
+        tenantAdmin.Put("/:id", handlers.UpdateTenant(db))
+
         // === NOTIFICATION ROUTES ===
         notifs := auth.Group("/notifications")
         notifs.Get("/", handlers.GetNotifications(db))

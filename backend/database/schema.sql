@@ -55,6 +55,7 @@ CREATE TABLE tenants (
     is_active       BOOLEAN     NOT NULL DEFAULT true,
     max_events      INTEGER     NOT NULL DEFAULT 1,
     max_tickets     INTEGER     NOT NULL DEFAULT 1000,
+    fee_percentage  NUMERIC(5,2) NOT NULL DEFAULT 3.00,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
 
@@ -271,6 +272,7 @@ CREATE TABLE orders (
     payment_type            TEXT,                              -- e.g. "qris", "bank_transfer"
     payment_method          TEXT,                              -- e.g. "gopay", "bca_va"
     midtrans_transaction_id TEXT,                              -- Midtrans reference
+    platform_fee            INTEGER     NOT NULL DEFAULT 0,     -- fee collected by platform (IDR)
     expires_at              TIMESTAMPTZ,                       -- order timeout
     paid_at                 TIMESTAMPTZ,
     deleted_at              TIMESTAMPTZ,
@@ -279,7 +281,8 @@ CREATE TABLE orders (
 
     CONSTRAINT uq_orders_order_code              UNIQUE (order_code),
     CONSTRAINT uq_orders_midtrans_transaction_id  UNIQUE (midtrans_transaction_id),
-    CONSTRAINT chk_orders_total_amount            CHECK (total_amount >= 0)
+    CONSTRAINT chk_orders_total_amount            CHECK (total_amount >= 0),
+    CONSTRAINT chk_orders_platform_fee            CHECK (platform_fee >= 0)
 );
 
 CREATE INDEX idx_orders_user_id     ON orders (user_id);
@@ -514,9 +517,17 @@ CREATE TABLE gate_logs (
     PRIMARY KEY (id, scanned_at)
 ) PARTITION BY RANGE (scanned_at);
 
--- Partition for April 2026 (concert month)
+-- Partition for April 2026
 CREATE TABLE gate_logs_2026_04 PARTITION OF gate_logs
     FOR VALUES FROM ('2026-04-01') TO ('2026-05-01');
+
+-- Partition for May 2026 (Jakarta concert)
+CREATE TABLE gate_logs_2026_05 PARTITION OF gate_logs
+    FOR VALUES FROM ('2026-05-01') TO ('2026-06-01');
+
+-- Partition for June 2026 (Bandung concert)
+CREATE TABLE gate_logs_2026_06 PARTITION OF gate_logs
+    FOR VALUES FROM ('2026-06-01') TO ('2026-07-01');
 
 -- Default partition for any out-of-range data
 CREATE TABLE gate_logs_default PARTITION OF gate_logs DEFAULT;

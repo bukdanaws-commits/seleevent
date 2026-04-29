@@ -73,6 +73,7 @@ type Tenant struct {
         IsActive       bool       `gorm:"default:true;not null" json:"isActive"`
         MaxEvents      int        `gorm:"default:1;not null" json:"maxEvents"`
         MaxTickets     int        `gorm:"default:1000;not null" json:"maxTickets"`
+        FeePercentage  float64    `gorm:"type:numeric(5,2);default:3.00;not null" json:"feePercentage"`
         Plan           string     `gorm:"default:free;not null" json:"plan"`
         TrialEndsAt    *time.Time `json:"trialEndsAt,omitempty"`
         ShardKey       *string    `json:"shardKey,omitempty"`
@@ -213,6 +214,7 @@ type Order struct {
         PaymentType           *string        `json:"paymentType,omitempty"`
         PaymentMethod         *string        `json:"paymentMethod,omitempty"`
         MidtransTransactionID *string        `json:"midtransTransactionId,omitempty"`
+        PlatformFee           int            `gorm:"default:0;not null" json:"platformFee"`
         ExpiresAt             *time.Time     `json:"expiresAt,omitempty"`
         PaidAt                *time.Time     `json:"paidAt,omitempty"`
         DeletedAt             gorm.DeletedAt `gorm:"index" json:"deletedAt,omitempty"`

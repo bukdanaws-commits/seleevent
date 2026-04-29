@@ -4,6 +4,7 @@ import (
         "errors"
         "fmt"
         "log"
+        "math"
         "time"
 
         "github.com/bukdanaws-commits/seleevent/backend/internal/models"
@@ -180,11 +181,19 @@ func (s *OrderService) ProcessPaymentCallback(orderCode string, paymentType stri
                 paymentTypeStr := paymentType
                 midtransID := midtransTxID
 
+                // Calculate platform fee based on tenant's fee_percentage
+                var tenant models.Tenant
+                if err := s.DB.Where("id = ?", order.TenantID).First(&tenant).Error; err != nil {
+                        log.Printf("[Order] Warning: could not load tenant for fee calculation: %v", err)
+                }
+                platformFee := calculatePlatformFee(order.TotalAmount, tenant.FeePercentage)
+
                 updates := map[string]interface{}{
                         "status":                  "paid",
                         "paid_at":                 now,
                         "payment_type":            paymentTypeStr,
                         "midtrans_transaction_id": midtransID,
+                        "platform_fee":            platformFee,
                 }
                 if err := tx.Model(&order).Updates(updates).Error; err != nil {
                         tx.Rollback()
@@ -268,6 +277,7 @@ func (s *OrderService) ProcessPaymentCallback(orderCode string, paymentType stri
                 if err := tx.Model(&order).Updates(map[string]interface{}{
                         "status":       "cancelled",
                         "payment_type": paymentType,
+                        "platform_fee": 0,
                 }).Error; err != nil {
                         tx.Rollback()
                         return fmt.Errorf("failed to update order status to cancelled: %w", err)
@@ -286,6 +296,7 @@ func (s *OrderService) ProcessPaymentCallback(orderCode string, paymentType stri
                 if err := tx.Model(&order).Updates(map[string]interface{}{
                         "status":       "expired",
                         "payment_type": paymentType,
+                        "platform_fee": 0,
                 }).Error; err != nil {
                         tx.Rollback()
                         return fmt.Errorf("failed to update order status to expired: %w", err)
@@ -394,4 +405,14 @@ func (s *OrderService) GetOrderByCode(orderCode string) (*models.Order, error) {
                 return nil, fmt.Errorf("order not found: %w", err)
         }
         return &order, nil
+}
+
+// calculatePlatformFee calculates the platform fee using the tenant's fee percentage.
+// Rounds half up to the nearest thousand (IDR).
+// Example: 1,500,000 × 3% = 45,000; 1,250,000 × 3% = 37,500 → 38,000
+func calculatePlatformFee(totalAmount int, feePercentage float64) int {
+        fee := float64(totalAmount) * feePercentage / 100.0
+        // Round half up to nearest thousand
+        rounded := math.Round(fee/1000.0) * 1000.0
+        return int(rounded)
 }

@@ -14,25 +14,113 @@ import (
 // GetAdminDashboard handles GET /api/v1/admin/dashboard
 func GetAdminDashboard(db *gorm.DB) fiber.Handler {
         return func(c *fiber.Ctx) error {
-                // Aggregate admin dashboard KPIs
-                var totalUsers, totalOrders, paidOrders, pendingOrders, totalTickets int64
-                var totalRevenue int64
+                // Global KPIs
+                var totalUsers, totalOrders, totalEvents, totalTickets int64
+                var grossRevenue, totalPlatformFee int64
 
                 db.Model(&models.User{}).Count(&totalUsers)
                 db.Model(&models.Order{}).Count(&totalOrders)
-                db.Model(&models.Order{}).Where("status = ?", "paid").Count(&paidOrders)
-                db.Model(&models.Order{}).Where("status = ?", "pending").Count(&pendingOrders)
+                db.Model(&models.Event{}).Count(&totalEvents)
                 db.Model(&models.Ticket{}).Count(&totalTickets)
                 db.Model(&models.Order{}).Where("status = ?", "paid").
-                        Select("COALESCE(SUM(total_amount), 0)").Scan(&totalRevenue)
+                        Select("COALESCE(SUM(total_amount), 0)").Scan(&grossRevenue)
+                db.Model(&models.Order{}).Where("status = ?", "paid").
+                        Select("COALESCE(SUM(platform_fee), 0)").Scan(&totalPlatformFee)
+
+                netRevenue := grossRevenue - totalPlatformFee
+
+                // Tenant fee percentage
+                var tenant models.Tenant
+                db.First(&tenant) // Get first tenant
+                feePercentage := tenant.FeePercentage
+
+                // Order status breakdown
+                type statusCount struct {
+                        Status string
+                        Count  int64
+                }
+                var orderBreakdown []statusCount
+                db.Model(&models.Order{}).Select("status, COUNT(*) as count").Group("status").Scan(&orderBreakdown)
+                orderMap := make(map[string]int64)
+                for _, s := range orderBreakdown {
+                        orderMap[s.Status] = s.Count
+                }
+
+                // Ticket status breakdown
+                var ticketBreakdown []statusCount
+                db.Model(&models.Ticket{}).Select("status, COUNT(*) as count").Group("status").Scan(&ticketBreakdown)
+                ticketMap := make(map[string]int64)
+                for _, s := range ticketBreakdown {
+                        ticketMap[s.Status] = s.Count
+                }
+
+                // Per-event summaries
+                var events []models.Event
+                db.Find(&events)
+
+                type eventSummary struct {
+                        EventID       string  `json:"eventId"`
+                        EventTitle    string  `json:"eventTitle"`
+                        Status        string  `json:"status"`
+                        TotalOrders   int64   `json:"totalOrders"`
+                        PaidOrders    int64   `json:"paidOrders"`
+                        TicketsSold   int64   `json:"ticketsSold"`
+                        GrossRevenue  int64   `json:"grossRevenue"`
+                        PlatformFee   int64   `json:"platformFee"`
+                        NetRevenue    int64   `json:"netRevenue"`
+                        OccupancyRate float64 `json:"occupancyRate"`
+                }
+
+                eventSummaries := make([]eventSummary, 0, len(events))
+                for _, evt := range events {
+                        var es eventSummary
+                        es.EventID = evt.ID
+                        es.EventTitle = evt.Title
+                        es.Status = evt.Status
+
+                        db.Model(&models.Order{}).Where("event_id = ?", evt.ID).Count(&es.TotalOrders)
+                        db.Model(&models.Order{}).Where("event_id = ? AND status = ?", evt.ID, "paid").Count(&es.PaidOrders)
+                        db.Model(&models.Ticket{}).
+                                Joins("JOIN orders ON orders.id = tickets.order_id").
+                                Where("orders.event_id = ?", evt.ID).Count(&es.TicketsSold)
+                        db.Model(&models.Order{}).Where("event_id = ? AND status = ?", evt.ID, "paid").
+                                Select("COALESCE(SUM(total_amount), 0)").Scan(&es.GrossRevenue)
+                        db.Model(&models.Order{}).Where("event_id = ? AND status = ?", evt.ID, "paid").
+                                Select("COALESCE(SUM(platform_fee), 0)").Scan(&es.PlatformFee)
+                        es.NetRevenue = es.GrossRevenue - es.PlatformFee
+
+                        if evt.Capacity > 0 {
+                                var insideCount int64
+                                db.Model(&models.Ticket{}).
+                                        Joins("JOIN orders ON orders.id = tickets.order_id").
+                                        Where("orders.event_id = ? AND tickets.status IN ?", evt.ID, []string{"inside", "outside"}).
+                                        Count(&insideCount)
+                                es.OccupancyRate = float64(insideCount) / float64(evt.Capacity) * 100
+                        }
+
+                        eventSummaries = append(eventSummaries, es)
+                }
+
+                // Recent orders (last 5)
+                var recentOrders []models.Order
+                db.Preload("User").Preload("Event").
+                        Order("created_at DESC").Limit(5).Find(&recentOrders)
 
                 return response.OK(c, fiber.Map{
-                        "totalUsers":    totalUsers,
-                        "totalOrders":   totalOrders,
-                        "paidOrders":    paidOrders,
-                        "pendingOrders": pendingOrders,
-                        "totalTickets":  totalTickets,
-                        "totalRevenue":  totalRevenue,
+                        "global": fiber.Map{
+                                "totalUsers":            totalUsers,
+                                "totalEvents":          totalEvents,
+                                "totalOrders":          totalOrders,
+                                "totalTickets":         totalTickets,
+                                "grossRevenue":         grossRevenue,
+                                "totalPlatformFee":     totalPlatformFee,
+                                "netRevenue":           netRevenue,
+                                "tenantFeePercentage":  feePercentage,
+                                "orderStatusBreakdown": orderMap,
+                                "ticketStatusBreakdown": ticketMap,
+                        },
+                        "events":       eventSummaries,
+                        "recentOrders": recentOrders,
                 })
         }
 }
