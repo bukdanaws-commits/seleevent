@@ -46,10 +46,12 @@ func Connect(cfg config.Config) (*gorm.DB, error) {
                 log.Printf("Database: connecting via TCP to %s:%s", cfg.DB.Host, cfg.DB.Port)
         }
 
-        // ── Retry logic for production (Cloud Run cold starts) ──────────────
+        // ── Retry logic for Cloud Run cold starts ──────────────────────────
+        // Both staging and production run on Cloud Run and need retries.
+        // Only skip retries for local development.
         retries := maxRetries
-        if cfg.App.Env != "production" {
-                retries = 1 // No retry in development
+        if cfg.App.Env == "development" || cfg.App.Env == "testing" {
+                retries = 1 // No retry in local development/testing
         }
 
         var db *gorm.DB

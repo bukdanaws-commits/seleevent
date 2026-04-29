@@ -37,12 +37,17 @@ func main() {
         log.Printf("Database user: %s", config.Cfg.DB.User)
 
         // Connect to database (auto-migrates models inside Connect)
-        // In production, this retries with exponential backoff up to 10 times.
+        // In staging/production, this retries with exponential backoff up to 10 times.
         db, err := database.Connect(config.Cfg)
         if err != nil {
-                log.Printf("⚠️  Failed to connect to database: %v", err)
-                log.Printf("⚠️  Starting server in degraded mode (API endpoints will return errors)")
-                log.Printf("⚠️  Check: 1) Database exists  2) User exists  3) Password is correct  4) Cloud SQL instance is reachable")
+                log.Printf("⚠️  FAILED to connect to database: %v", err)
+                log.Printf("⚠️  Starting server in DEGRADED MODE — API endpoints will return 503")
+                log.Printf("⚠️  Diagnostic info:")
+                log.Printf("     DB_HOST=%s  DB_USER=%s  DB_NAME=%s  DB_SSLMODE=%s",
+                        config.Cfg.DB.Host, config.Cfg.DB.User, config.Cfg.DB.Name, config.Cfg.DB.SSLMode)
+                log.Printf("     DB_PASSWORD is set: %v  (length: %d)",
+                        config.Cfg.DB.Password != "", len(config.Cfg.DB.Password))
+                log.Printf("⚠️  Check: 1) Database exists  2) User exists  3) Password matches  4) Cloud SQL instance is reachable  5) --add-cloudsql-instances is set on Cloud Run")
         }
 
         // Start SSE Hub
