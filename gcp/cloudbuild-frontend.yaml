@@ -44,8 +44,8 @@ steps:
       - '-c'
       - |
         echo "🔨 Building Next.js for $_DEPLOY_ENV..."
-        echo "   API URL: $NEXT_PUBLIC_API_URL"
-        echo "   Midtrans Sandbox: $NEXT_PUBLIC_MIDTRANS_IS_SANDBOX"
+        echo "   API URL: $_BACKEND_URL"
+        echo "   Midtrans Sandbox: $_MIDTRANS_IS_SANDBOX"
         bun run build
         echo "✅ Next.js build complete"
     waitFor: ['install-deps']
