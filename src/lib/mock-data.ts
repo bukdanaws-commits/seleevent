@@ -98,7 +98,7 @@ function uuid(seed: string, index: number = 0): string {
 export const MOCK_EVENT: IEvent = {
   id: EVENT_ID,
   tenantId: TENANT_ID,
-  slug: 'sheila-on-7-jakarta-2026',
+  slug: 'sheila-on7-jakarta',
   title: 'Sheila On 7 — JAKARTA',
   subtitle: 'Melompat Lebih Tinggi Tour 2026',
   date: EVENT_DATE,

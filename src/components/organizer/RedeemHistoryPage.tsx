@@ -55,7 +55,7 @@ export function RedeemHistoryPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [currentPage, setCurrentPage] = useState(1)
 
-  const { data: redemptionsData, isLoading } = useOrganizerRedemptions('sheila-on-7-melompat-lebih-tinggi')
+  const { data: redemptionsData, isLoading } = useOrganizerRedemptions('sheila-on7-jakarta')
 
   // Extract redemptions from paginated response
   const redemptions = useMemo(() => {

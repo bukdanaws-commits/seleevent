@@ -35,9 +35,9 @@ export function OrganizerLiveMonitor() {
   const feedRef = useRef<HTMLDivElement>(null)
   const [sseConnected, setSseConnected] = useState(false)
 
-  const { data: liveData, isLoading } = useOrganizerLiveMonitor('sheila-on-7-melompat-lebih-tinggi')
-  const { data: gatesData } = useOrganizerGates('sheila-on-7-melompat-lebih-tinggi')
-  const { data: countersData } = useOrganizerCounters('sheila-on-7-melompat-lebih-tinggi')
+  const { data: liveData, isLoading } = useOrganizerLiveMonitor('sheila-on7-jakarta')
+  const { data: gatesData } = useOrganizerGates('sheila-on7-jakarta')
+  const { data: countersData } = useOrganizerCounters('sheila-on7-jakarta')
 
   const liveStats = liveData as Record<string, unknown> | undefined
   const gates = ((gatesData as { data: unknown[] } | undefined)?.data ?? []) as Record<string, unknown>[]

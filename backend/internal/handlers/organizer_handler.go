@@ -10,17 +10,36 @@ import (
         "gorm.io/gorm"
 )
 
+// resolveEventID resolves an eventId parameter that may be either a UUID or a slug.
+// If the value looks like a UUID (contains hyphens in UUID format), it's returned as-is.
+// Otherwise, it's treated as a slug and looked up in the database.
+func resolveEventID(db *gorm.DB, eventID string) (string, error) {
+        if eventID == "" {
+                return "", fiber.NewError(fiber.StatusBadRequest, "eventId is required")
+        }
+        // If it looks like a UUID (8-4-4-4-12 format), return as-is
+        if len(eventID) == 36 && eventID[8] == '-' && eventID[13] == '-' && eventID[18] == '-' && eventID[23] == '-' {
+                return eventID, nil
+        }
+        // Otherwise, treat as slug and resolve to UUID
+        var event models.Event
+        if err := db.Where("slug = ?", eventID).First(&event).Error; err != nil {
+                return "", fiber.NewError(fiber.StatusBadRequest, "Event not found for slug: "+eventID)
+        }
+        return event.ID, nil
+}
+
 // GetOrganizerDashboardStats handles GET /api/v1/organizer/dashboard/stats
 func GetOrganizerDashboardStats(db *gorm.DB) fiber.Handler {
         statsService := services.NewStatsService(db)
         return func(c *fiber.Ctx) error {
-                eventID := c.Query("eventId")
-                if eventID == "" {
-                        return response.BadRequest(c, "eventId query parameter is required")
+                eventID, err := resolveEventID(db, c.Query("eventId"))
+                if err != nil {
+                        return response.BadRequest(c, err.Error())
                 }
 
-                result, err := statsService.GetDashboardStats(eventID)
-                if err != nil {
+                result, statsErr := statsService.GetDashboardStats(eventID)
+                if statsErr != nil {
                         return response.InternalError(c, "Failed to retrieve dashboard stats")
                 }
 
@@ -32,13 +51,13 @@ func GetOrganizerDashboardStats(db *gorm.DB) fiber.Handler {
 func GetOrganizerLiveMonitor(db *gorm.DB) fiber.Handler {
         statsService := services.NewStatsService(db)
         return func(c *fiber.Ctx) error {
-                eventID := c.Query("eventId")
-                if eventID == "" {
-                        return response.BadRequest(c, "eventId query parameter is required")
+                eventID, err := resolveEventID(db, c.Query("eventId"))
+                if err != nil {
+                        return response.BadRequest(c, err.Error())
                 }
 
-                result, err := statsService.GetLiveStats(eventID)
-                if err != nil {
+                result, statsErr := statsService.GetLiveStats(eventID)
+                if statsErr != nil {
                         return response.InternalError(c, "Failed to retrieve live stats")
                 }
 
@@ -49,9 +68,9 @@ func GetOrganizerLiveMonitor(db *gorm.DB) fiber.Handler {
 // GetOrganizerRedemptions handles GET /api/v1/organizer/redemptions
 func GetOrganizerRedemptions(db *gorm.DB) fiber.Handler {
         return func(c *fiber.Ctx) error {
-                eventID := c.Query("eventId")
-                if eventID == "" {
-                        return response.BadRequest(c, "eventId query parameter is required")
+                eventID, resolveErr := resolveEventID(db, c.Query("eventId"))
+                if resolveErr != nil {
+                        return response.BadRequest(c, resolveErr.Error())
                 }
 
                 page := c.QueryInt("page", 1)
@@ -94,9 +113,9 @@ func GetOrganizerRedemptions(db *gorm.DB) fiber.Handler {
 // GetOrganizerCounters handles GET /api/v1/organizer/counters
 func GetOrganizerCounters(db *gorm.DB) fiber.Handler {
         return func(c *fiber.Ctx) error {
-                eventID := c.Query("eventId")
-                if eventID == "" {
-                        return response.BadRequest(c, "eventId query parameter is required")
+                eventID, err := resolveEventID(db, c.Query("eventId"))
+                if err != nil {
+                        return response.BadRequest(c, err.Error())
                 }
 
                 var counters []models.Counter
@@ -125,9 +144,9 @@ func GetOrganizerCounters(db *gorm.DB) fiber.Handler {
 // GetOrganizerGates handles GET /api/v1/organizer/gates
 func GetOrganizerGates(db *gorm.DB) fiber.Handler {
         return func(c *fiber.Ctx) error {
-                eventID := c.Query("eventId")
-                if eventID == "" {
-                        return response.BadRequest(c, "eventId query parameter is required")
+                eventID, err := resolveEventID(db, c.Query("eventId"))
+                if err != nil {
+                        return response.BadRequest(c, err.Error())
                 }
 
                 var gates []models.Gate
@@ -161,9 +180,9 @@ func GetOrganizerGates(db *gorm.DB) fiber.Handler {
 // GetOrganizerTickets handles GET /api/v1/organizer/tickets
 func GetOrganizerTickets(db *gorm.DB) fiber.Handler {
         return func(c *fiber.Ctx) error {
-                eventID := c.Query("eventId")
-                if eventID == "" {
-                        return response.BadRequest(c, "eventId query parameter is required")
+                eventID, err := resolveEventID(db, c.Query("eventId"))
+                if err != nil {
+                        return response.BadRequest(c, err.Error())
                 }
 
                 page := c.QueryInt("page", 1)
@@ -208,12 +227,11 @@ func GetOrganizerTickets(db *gorm.DB) fiber.Handler {
 // GetOrganizerStaff handles GET /api/v1/organizer/staff
 func GetOrganizerStaff(db *gorm.DB) fiber.Handler {
         return func(c *fiber.Ctx) error {
-                eventID := c.Query("eventId")
-                role := c.Query("role")
-
-                if eventID == "" {
-                        return response.BadRequest(c, "eventId query parameter is required")
+                eventID, err := resolveEventID(db, c.Query("eventId"))
+                if err != nil {
+                        return response.BadRequest(c, err.Error())
                 }
+                role := c.Query("role")
 
                 type staffMember struct {
                         ID         string    `json:"id"`
@@ -295,9 +313,9 @@ func GetOrganizerStaff(db *gorm.DB) fiber.Handler {
 // GetOrganizerWristbandInventory handles GET /api/v1/organizer/wristband-inventory
 func GetOrganizerWristbandInventory(db *gorm.DB) fiber.Handler {
         return func(c *fiber.Ctx) error {
-                eventID := c.Query("eventId")
-                if eventID == "" {
-                        return response.BadRequest(c, "eventId query parameter is required")
+                eventID, err := resolveEventID(db, c.Query("eventId"))
+                if err != nil {
+                        return response.BadRequest(c, err.Error())
                 }
 
                 var inventory []models.WristbandInventory

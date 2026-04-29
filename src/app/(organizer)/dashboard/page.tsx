@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils'
 import { useOrganizerDashboard, useOrganizerCounters, useOrganizerGates, useOrganizerRedemptions } from '@/hooks/use-api'
 import { formatRupiah, formatTime } from '@/lib/utils'
 
-const EVENT_SLUG = 'sheila-on-7-melompat-lebih-tinggi'
+const EVENT_SLUG = 'sheila-on7-jakarta'
 
 export default function DashboardPage() {
   const { data: dashboardData, isLoading: dashboardLoading } = useOrganizerDashboard(EVENT_SLUG)

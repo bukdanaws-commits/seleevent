@@ -163,7 +163,7 @@ PARTICIPANT_IDS = [uid for uid, role, _, _ in USERS if role == 'PARTICIPANT']
 EVENTS = [
     {
         'short_id': 1,
-        'slug': 'sheila-on-7-live-in-jakarta',
+        'slug': 'sheila-on7-jakarta',
         'title': 'Sheila On 7 — Live in Jakarta',
         'subtitle': 'Tunggu Aku di Jakarta',
         'date': '2026-05-30 19:00:00+07',
@@ -176,7 +176,7 @@ EVENTS = [
     },
     {
         'short_id': 2,
-        'slug': 'sheila-on-7-tour-bandung',
+        'slug': 'sheila-on7-bandung',
         'title': 'Sheila On 7 Tour — Bandung',
         'subtitle': 'Kita Bercerita di Bandung',
         'date': '2026-06-15 19:00:00+07',

@@ -75,6 +75,7 @@ export const API = {
 
   // Public
   PUBLIC: {
+    EVENTS:          '/api/v1/events',
     CHECK_TICKET:   '/api/v1/tickets/check',
     EVENT_DETAIL:   (slug: string) => `/api/v1/events/${slug}`,
     TICKET_TYPES:   (eventId: string) => `/api/v1/events/${eventId}/ticket-types`,
@@ -156,7 +157,7 @@ export const API = {
 
   // SSE
   SSE: {
-    STREAM:        '/api/v1/events/stream',
+    STREAM:        '/api/v1/sse/stream',
   },
 } as const
 
@@ -371,6 +372,9 @@ export const authApi = {
 
 // Public
 export const publicApi = {
+  getEvents: (params?: Record<string, string>) =>
+    apiFetch<unknown[]>(API.PUBLIC.EVENTS, { params }),
+
   getEventBySlug: (slug: string) =>
     apiFetch<{ event: unknown }>(API.PUBLIC.EVENT_DETAIL(slug)),
 

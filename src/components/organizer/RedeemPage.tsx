@@ -43,8 +43,8 @@ export function RedeemPage() {
   const [foundTicket, setFoundTicket] = useState<Record<string, unknown> | null>(null)
   const [wristbandInput, setWristbandInput] = useState('')
 
-  const { data: ticketsData, isLoading: ticketsLoading } = useOrganizerTickets('sheila-on-7-melompat-lebih-tinggi')
-  const { data: wristbandData, isLoading: wristbandLoading } = useOrganizerWristbandInventory('sheila-on-7-melompat-lebih-tinggi')
+  const { data: ticketsData, isLoading: ticketsLoading } = useOrganizerTickets('sheila-on7-jakarta')
+  const { data: wristbandData, isLoading: wristbandLoading } = useOrganizerWristbandInventory('sheila-on7-jakarta')
   const scanMutation = useCounterScan()
 
   const tickets = ((ticketsData as { data: unknown[] } | undefined)?.data ?? []) as Record<string, unknown>[]

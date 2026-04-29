@@ -69,6 +69,7 @@ func Setup(app *fiber.App, db *gorm.DB, hub *services.SSEHub) {
         public.Post("/tickets/check", handlers.CheckTicket(db))
 
         // Public event info
+        public.Get("/events", handlers.GetPublishedEvents(db))
         public.Get("/events/:slug", handlers.GetEventBySlug(db))
         public.Get("/events/:eventId/ticket-types", handlers.GetEventTicketTypes(db))
 
@@ -77,9 +78,11 @@ func Setup(app *fiber.App, db *gorm.DB, hub *services.SSEHub) {
         public.Post("/payment/notification", handlers.PaymentNotification(db))
 
         // SSE (Server-Sent Events) - real-time (supports ?token= query param for EventSource)
-        // Placed outside auth group because EventSource API cannot send custom headers;
+        // Placed at /sse/stream (not /events/stream) to avoid route conflict with /events/:slug
+        // where "stream" would be captured as a slug parameter.
+        // EventSource API cannot send custom headers;
         // JWTAuthSSE reads token from Authorization header OR ?token= query param.
-        api.Get("/events/stream", middleware.JWTAuthSSE(), handlers.SSEStream(db, hub))
+        api.Get("/sse/stream", middleware.JWTAuthSSE(), handlers.SSEStream(db, hub))
 
         // === AUTHENTICATED ROUTES ===
         auth := api.Group("", middleware.JWTAuth())

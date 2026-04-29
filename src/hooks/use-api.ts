@@ -177,12 +177,12 @@ export function useLogout() {
 // ─── EVENT HOOKS ───────────────────────────────────────────────────────────
 
 /**
- * useEvents() — fetches all available events
+ * useEvents() — fetches all published events (public, no auth required)
  */
 export function useEvents(params?: Record<string, string>) {
   return useQuery({
-    queryKey: queryKeys.admin.events(params),
-    queryFn: () => adminApi.getEvents(params),
+    queryKey: ['public', 'events', params],
+    queryFn: () => publicApi.getEvents(params),
   })
 }
 

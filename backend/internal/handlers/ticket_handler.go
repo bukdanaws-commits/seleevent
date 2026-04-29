@@ -35,6 +35,28 @@ func CheckTicket(db *gorm.DB) fiber.Handler {
         }
 }
 
+// GetPublishedEvents handles GET /api/v1/events
+// Public endpoint — returns all published events (no auth required).
+func GetPublishedEvents(db *gorm.DB) fiber.Handler {
+        return func(c *fiber.Ctx) error {
+                var events []models.Event
+                query := db.Preload("TicketTypes").
+                        Where("status = ?", "published").
+                        Order("date ASC")
+
+                // Optional city filter
+                if city := c.Query("city"); city != "" {
+                        query = query.Where("city = ?", city)
+                }
+
+                if err := query.Find(&events).Error; err != nil {
+                        return response.InternalError(c, "Failed to retrieve events")
+                }
+
+                return response.OK(c, events)
+        }
+}
+
 // GetEventBySlug handles GET /api/v1/events/:slug
 func GetEventBySlug(db *gorm.DB) fiber.Handler {
         return func(c *fiber.Ctx) error {

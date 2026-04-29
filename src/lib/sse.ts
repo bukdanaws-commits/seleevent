@@ -1,6 +1,6 @@
 // ─── SELEEVENT SSE CLIENT ──────────────────────────────────────────────────
 // Server-Sent Events client for real-time updates from Golang Fiber backend
-// Backend endpoint: GET /api/v1/events/stream?token=xxx
+// Backend endpoint: GET /api/v1/sse/stream?token=xxx
 // Event types: "redemption", "gate_scan", "ticket_cancelled", "stats_update"
 
 type SSEEventHandler = (event: MessageEvent) => void
@@ -36,12 +36,12 @@ class SSEClient {
       // For Cloud Run, NEXT_PUBLIC_API_URL is the full backend URL
       // For local dev with XTransformPort, build the proxy URL
       if (apiUrl.startsWith('http') || apiUrl.startsWith('/api')) {
-        this.url = `${apiUrl}/api/v1/events/stream`
+        this.url = `${apiUrl}/api/v1/sse/stream`
       } else {
-        this.url = `/?XTransformPort=${GO_BACKEND_PORT}/api/v1/events/stream`
+        this.url = `/?XTransformPort=${GO_BACKEND_PORT}/api/v1/sse/stream`
       }
     } else {
-      this.url = `/?XTransformPort=${GO_BACKEND_PORT}/api/v1/events/stream`
+      this.url = `/?XTransformPort=${GO_BACKEND_PORT}/api/v1/sse/stream`
     }
 
     this.reconnectInterval = options.reconnectInterval || 3000
