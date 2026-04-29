@@ -59,7 +59,7 @@ func (s *GateService) ScanTicket(ticketCode, gateID, staffID, action string) (*G
 
         // 3. Validate action against current status
         switch action {
-        case "IN":
+        case "entry":
                 if ticket.Status == "inside" {
                         return &GateScanResult{
                                 Success:  false,
@@ -76,10 +76,10 @@ func (s *GateService) ScanTicket(ticketCode, gateID, staffID, action string) (*G
                                 TicketCode: ticketCode,
                         }, nil
                 }
-                // Valid IN: status becomes "inside"
+                // Valid entry: status becomes "inside"
                 ticket.Status = "inside"
 
-        case "OUT":
+        case "exit":
                 if ticket.Status != "inside" {
                         return &GateScanResult{
                                 Success:  false,
@@ -88,7 +88,7 @@ func (s *GateService) ScanTicket(ticketCode, gateID, staffID, action string) (*G
                                 TicketCode: ticketCode,
                         }, nil
                 }
-                // Valid OUT: status becomes "outside"
+                // Valid exit: status becomes "outside"
                 ticket.Status = "outside"
 
         default:
@@ -101,9 +101,9 @@ func (s *GateService) ScanTicket(ticketCode, gateID, staffID, action string) (*G
                 return nil, err
         }
 
-        // 5. Count previous IN scans for re-entry tracking
+        // 5. Count previous entry scans for re-entry tracking
         var reentryCount int64
-        s.DB.Model(&models.GateLog{}).Where("ticket_id = ? AND action = ?", ticket.ID, "IN").Count(&reentryCount)
+        s.DB.Model(&models.GateLog{}).Where("ticket_id = ? AND action = ?", ticket.ID, "entry").Count(&reentryCount)
 
         // Get previous action if any
         var previousLog models.GateLog
@@ -199,14 +199,14 @@ func (s *GateService) GetGateStatus(gateID, staffID string) (*GateStatusResult, 
                 return nil, err
         }
 
-        // Count IN and OUT today
+        // Count entry and exit today
         today := time.Now().Truncate(24 * time.Hour)
         var totalInToday, totalOutToday int64
         s.DB.Model(&models.GateLog{}).
-                Where("gate_id = ? AND action = ? AND scanned_at >= ?", gateID, "IN", today).
+                Where("gate_id = ? AND action = ? AND scanned_at >= ?", gateID, "entry", today).
                 Count(&totalInToday)
         s.DB.Model(&models.GateLog{}).
-                Where("gate_id = ? AND action = ? AND scanned_at >= ?", gateID, "OUT", today).
+                Where("gate_id = ? AND action = ? AND scanned_at >= ?", gateID, "exit", today).
                 Count(&totalOutToday)
 
         // Count currently inside (tickets with status=inside for this event)

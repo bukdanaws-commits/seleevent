@@ -553,8 +553,8 @@ func GetAdminGates(db *gorm.DB) fiber.Handler {
                         eg := enrichedGate{Gate: g}
                         db.Model(&models.GateStaff{}).Where("gate_id = ? AND status = ?", g.ID, "active").Count(&eg.StaffCount)
                         db.Model(&models.GateLog{}).Where("gate_id = ?", g.ID).Count(&eg.ScanCount)
-                        db.Model(&models.GateLog{}).Where("gate_id = ? AND action = ? AND scanned_at >= ?", g.ID, "IN", today).Count(&eg.TodayIn)
-                        db.Model(&models.GateLog{}).Where("gate_id = ? AND action = ? AND scanned_at >= ?", g.ID, "OUT", today).Count(&eg.TodayOut)
+                        db.Model(&models.GateLog{}).Where("gate_id = ? AND action = ? AND scanned_at >= ?", g.ID, "entry", today).Count(&eg.TodayIn)
+                        db.Model(&models.GateLog{}).Where("gate_id = ? AND action = ? AND scanned_at >= ?", g.ID, "exit", today).Count(&eg.TodayOut)
                         result[i] = eg
                 }
 
@@ -606,8 +606,8 @@ func GetAdminGateMonitoring(db *gorm.DB) fiber.Handler {
 
                         db.Model(&models.GateStaff{}).Where("gate_id = ? AND status = ?", g.ID, "active").Count(&gm.StaffCount)
                         db.Model(&models.GateLog{}).Where("gate_id = ?", g.ID).Count(&gm.TotalScans)
-                        db.Model(&models.GateLog{}).Where("gate_id = ? AND action = ? AND scanned_at >= ?", g.ID, "IN", today).Count(&gm.TodayIn)
-                        db.Model(&models.GateLog{}).Where("gate_id = ? AND action = ? AND scanned_at >= ?", g.ID, "OUT", today).Count(&gm.TodayOut)
+                        db.Model(&models.GateLog{}).Where("gate_id = ? AND action = ? AND scanned_at >= ?", g.ID, "entry", today).Count(&gm.TodayIn)
+                        db.Model(&models.GateLog{}).Where("gate_id = ? AND action = ? AND scanned_at >= ?", g.ID, "exit", today).Count(&gm.TodayOut)
 
                         // Throughput: scans in last hour / 60
                         var lastHourScans int64

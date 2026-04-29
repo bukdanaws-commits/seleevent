@@ -149,8 +149,8 @@ func GetOrganizerGates(db *gorm.DB) fiber.Handler {
                         eg := enrichedGate{Gate: g}
                         db.Model(&models.GateStaff{}).Where("gate_id = ? AND status = ?", g.ID, "active").Count(&eg.StaffCount)
                         db.Model(&models.GateLog{}).Where("gate_id = ?", g.ID).Count(&eg.ScanCount)
-                        db.Model(&models.GateLog{}).Where("gate_id = ? AND action = ? AND scanned_at >= ?", g.ID, "IN", today).Count(&eg.TodayIn)
-                        db.Model(&models.GateLog{}).Where("gate_id = ? AND action = ? AND scanned_at >= ?", g.ID, "OUT", today).Count(&eg.TodayOut)
+                        db.Model(&models.GateLog{}).Where("gate_id = ? AND action = ? AND scanned_at >= ?", g.ID, "entry", today).Count(&eg.TodayIn)
+                        db.Model(&models.GateLog{}).Where("gate_id = ? AND action = ? AND scanned_at >= ?", g.ID, "exit", today).Count(&eg.TodayOut)
                         result[i] = eg
                 }
 
@@ -316,60 +316,53 @@ func GetOrganizerWristbandGuide(db *gorm.DB) fiber.Handler {
         return func(c *fiber.Ctx) error {
                 guide := []fiber.Map{
                         {
-                                "ticketType":     "VVIP Premium",
+                                "ticketType":     "VVIP",
                                 "wristbandColor": "Gold",
                                 "wristbandType":  "VVIP Gold",
                                 "colorHex":       "#FFD700",
-                                "description":    "Premium VVIP experience - front stage, meet & greet",
+                                "description":    "VVIP experience - front stage, meet & greet",
                         },
                         {
                                 "ticketType":     "VIP",
-                                "wristbandColor": "Teal",
-                                "wristbandType":  "VIP Teal",
-                                "colorHex":       "#008080",
+                                "wristbandColor": "Silver",
+                                "wristbandType":  "VIP Silver",
+                                "colorHex":       "#C0C0C0",
                                 "description":    "VIP zone access - premium viewing area",
                         },
                         {
-                                "ticketType":     "Festival",
-                                "wristbandColor": "Orange",
-                                "wristbandType":  "Festival Orange",
-                                "colorHex":       "#FFA500",
-                                "description":    "Festival standing zone",
-                        },
-                        {
                                 "ticketType":     "CAT 1",
-                                "wristbandColor": "Merah",
-                                "wristbandType":  "CAT 1 Merah",
-                                "colorHex":       "#FF0000",
+                                "wristbandColor": "Blue",
+                                "wristbandType":  "CAT 1 Blue",
+                                "colorHex":       "#1E90FF",
                                 "description":    "Category 1 - closest tribun section",
                         },
                         {
                                 "ticketType":     "CAT 2",
-                                "wristbandColor": "Biru",
-                                "wristbandType":  "CAT 2 Biru",
-                                "colorHex":       "#0000FF",
+                                "wristbandColor": "Green",
+                                "wristbandType":  "CAT 2 Green",
+                                "colorHex":       "#32CD32",
                                 "description":    "Category 2 - mid tribun section",
                         },
                         {
                                 "ticketType":     "CAT 3",
-                                "wristbandColor": "Hijau",
-                                "wristbandType":  "CAT 3 Hijau",
-                                "colorHex":       "#008000",
+                                "wristbandColor": "Orange",
+                                "wristbandType":  "CAT 3 Orange",
+                                "colorHex":       "#FF8C00",
                                 "description":    "Category 3 - upper tribun section",
                         },
                         {
-                                "ticketType":     "CAT 4",
-                                "wristbandColor": "Ungu",
-                                "wristbandType":  "CAT 4 Ungu",
-                                "colorHex":       "#800080",
-                                "description":    "Category 4 - back tribun section",
+                                "ticketType":     "Festival",
+                                "wristbandColor": "Red",
+                                "wristbandType":  "Festival Red",
+                                "colorHex":       "#DC143C",
+                                "description":    "Festival standing zone",
                         },
                         {
-                                "ticketType":     "CAT 5",
-                                "wristbandColor": "Putih",
-                                "wristbandType":  "CAT 5 Putih",
-                                "colorHex":       "#FFFFFF",
-                                "description":    "Category 5 - furthest tribun section",
+                                "ticketType":     "Premium",
+                                "wristbandColor": "Purple",
+                                "wristbandType":  "Premium Purple",
+                                "colorHex":       "#9B59B6",
+                                "description":    "Premium access - exclusive areas and benefits",
                         },
                 }
 

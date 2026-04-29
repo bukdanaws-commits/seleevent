@@ -33,8 +33,8 @@ func GateScan(db *gorm.DB) fiber.Handler {
                 if req.TicketCode == "" || req.GateID == "" || req.Action == "" {
                         return response.BadRequest(c, "ticketCode, gateId, and action are required")
                 }
-                if req.Action != "IN" && req.Action != "OUT" {
-                        return response.BadRequest(c, "action must be IN or OUT")
+                if req.Action != "entry" && req.Action != "exit" {
+                        return response.BadRequest(c, "action must be entry or exit")
                 }
 
                 result, err := gateService.ScanTicket(req.TicketCode, req.GateID, staffID, req.Action)

@@ -162,7 +162,7 @@ func (s *OrderService) ProcessPaymentCallback(orderCode string, paymentType stri
         }
 
         // Idempotency: if already processed, skip
-        if order.Status == "paid" || order.Status == "cancelled" || order.Status == "expired" {
+        if order.Status == "paid" || order.Status == "cancelled" || order.Status == "expired" || order.Status == "refunded" {
                 return nil
         }
 
@@ -311,6 +311,25 @@ func (s *OrderService) ProcessPaymentCallback(orderCode string, paymentType stri
                                 Update("sold", gorm.Expr("GREATEST(sold - ?, 0)", item.Quantity))
                 }
 
+        case "refund":
+                if err := tx.Model(&order).Updates(map[string]interface{}{
+                        "status":       "refunded",
+                        "payment_type": paymentType,
+                        "platform_fee": 0,
+                }).Error; err != nil {
+                        tx.Rollback()
+                        return fmt.Errorf("failed to update order status to refunded: %w", err)
+                }
+                // Cancel all active/redeemed/inside/outside tickets
+                tx.Model(&models.Ticket{}).
+                        Where("order_id = ? AND status IN ?", order.ID, []string{"active", "redeemed", "inside", "outside"}).
+                        Update("status", "cancelled")
+                // Restore ticket type sold counts
+                for _, item := range order.Items {
+                        tx.Model(&models.TicketType{}).Where("id = ?", item.TicketTypeID).
+                                Update("sold", gorm.Expr("GREATEST(sold - ?, 0)", item.Quantity))
+                }
+
         case "pending":
                 // Still pending, just update payment type
                 if err := tx.Model(&order).Updates(map[string]interface{}{
@@ -371,7 +390,8 @@ func (s *OrderService) CancelOrder(orderID string, userID string) error {
         }()
 
         if err := tx.Model(&order).Updates(map[string]interface{}{
-                "status": "cancelled",
+                "status":       "cancelled",
+                "platform_fee": 0,
         }).Error; err != nil {
                 tx.Rollback()
                 return fmt.Errorf("failed to cancel order: %w", err)

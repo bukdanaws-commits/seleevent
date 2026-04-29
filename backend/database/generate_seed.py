@@ -295,10 +295,14 @@ PAYMENT_METHODS = {
     'shopeepay': ['shopeepay'],
 }
 
+# Global order counter to ensure unique midtrans IDs across events
+_global_order_idx = 0
+
 def gen_orders_for_event(event_short_id, counts):
     """Generate order data for an event.
     counts = {'paid': N, 'pending': N, 'expired': N, 'cancelled': N, 'refunded': N}
     """
+    global _global_order_idx
     orders = []
     order_idx = 0
 
@@ -341,7 +345,8 @@ def gen_orders_for_event(event_short_id, counts):
                 pt = rng.choice(PAYMENT_TYPES)
                 payment_type = pt
                 payment_method = rng.choice(PAYMENT_METHODS[pt])
-                midtrans_id = gen_midtrans_id(order_idx + 1)
+                midtrans_id = gen_midtrans_id(_global_order_idx + 1)
+                _global_order_idx += 1
                 paid_at = f"2026-04-{rng.randint(20, 28):02d} {rng.randint(8, 20):02d}:{rng.randint(10, 59):02d}:00+07"
             elif status == 'pending':
                 expires_at = "NOW() + interval '30 minutes'"
@@ -352,7 +357,8 @@ def gen_orders_for_event(event_short_id, counts):
                 pt = rng.choice(PAYMENT_TYPES)
                 payment_type = pt
                 payment_method = rng.choice(PAYMENT_METHODS[pt])
-                midtrans_id = gen_midtrans_id(order_idx + 100)
+                midtrans_id = gen_midtrans_id(_global_order_idx + 200)
+                _global_order_idx += 1
                 paid_at = f"2026-04-{rng.randint(20, 25):02d} {rng.randint(8, 18):02d}:{rng.randint(10, 59):02d}:00+07"
 
             orders.append({

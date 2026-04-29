@@ -361,9 +361,11 @@ type Redemption struct {
 }
 
 // ─── GATE LOG (Entry/Exit Tracking) ────────────────────────────────────────
+// NOTE: Uses BaseModelNoUpdate because the gate_logs table (partitioned) has
+// no updated_at column. The trigger loop in schema.sql explicitly excludes it.
 
 type GateLog struct {
-        BaseModel
+        BaseModelNoUpdate
         TenantID  string    `gorm:"index;not null" json:"tenantId"`
         TicketID  string    `gorm:"index;not null" json:"ticketId"`
         GateID    string    `gorm:"index;not null" json:"gateId"`
