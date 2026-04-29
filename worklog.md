@@ -92,3 +92,27 @@ Work Log:
 Stage Summary:
 - Google Login fix committed and pushed (1077dca)
 - User needs to deploy from Cloud Shell: `cd seleevent && git pull && ./gcp/deploy-from-cloudshell.sh staging`
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: Fix frontend API integration bugs + seed data duplicate seat labels
+
+Work Log:
+- Analyzed Cloud Shell output showing successful backend deployment and database seeding
+- Backend is deployed and working: /api/v1/events and /api/v1/events/sheila-on7-jakarta return data
+- Database seeded (with some non-critical errors)
+- Found critical frontend bug: fetchEventData checks 'event' in response but apiFetch unwraps backend envelope, returning event object directly (not { event: {...} })
+- Found critical frontend bug: fetchTicketTypes uses FALLBACK_EVENT.id which doesn't exist in DB
+- Fixed both: fetchEventData now checks 'id' in response (event object directly), extracts ticket types from event response (backend preloads TicketTypes)
+- Changed publicApi.getEventBySlug return type from { event: unknown } to Record<string, unknown>
+- Fixed seed data: Festival tickets now use unique seat labels (Festival-0001, Festival-0002, etc.) to avoid uq_event_seat constraint violations
+- Verified no duplicate seat labels and no FK violations in regenerated seed data
+- Frontend lint: clean
+- Pushed to GitHub: f690ca8 → origin/main
+
+Stage Summary:
+- Frontend API integration bugs fixed (event data shape, ticket types fetch)
+- Seed data duplicate key constraint violations fixed
+- All changes committed and pushed (f690ca8)
+- Pending: Deploy frontend to Cloud Run, re-seed database, configure Google OAuth origins
