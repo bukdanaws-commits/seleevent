@@ -96,6 +96,8 @@ func Connect(cfg config.Config) (*gorm.DB, error) {
         }
 
         // Auto-migrate all models EXCEPT GateLog (partitioned table managed via SQL DDL)
+        // In staging/production, tables are created by schema.sql so AutoMigrate
+        // may encounter constraint mismatches — we log but don't fail.
         var modelsToMigrate []interface{}
         for _, m := range models.AllModels() {
                 if _, ok := m.(*models.GateLog); !ok {
@@ -103,7 +105,10 @@ func Connect(cfg config.Config) (*gorm.DB, error) {
                 }
         }
         if err := db.AutoMigrate(modelsToMigrate...); err != nil {
-                return nil, fmt.Errorf("failed to auto-migrate: %w", err)
+                // Non-fatal: schema.sql already created the tables with different
+                // constraint names than GORM expects. Log warning and continue.
+                log.Printf("⚠️  AutoMigrate warning (non-fatal): %v", err)
+                log.Printf("⚠️  Tables already exist from schema.sql — this is expected in staging/production")
         }
 
         // ── Ensure gate_logs partitioned table exists ───────────────────────────
