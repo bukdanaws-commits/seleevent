@@ -209,14 +209,14 @@ func GetOrganizerTickets(db *gorm.DB) fiber.Handler {
                 }
 
                 query.Count(&total)
-                err := query.
+                queryErr := query.
                         Preload("Order").
                         Order("tickets.created_at DESC").
                         Limit(perPage).
                         Offset(offset).
                         Find(&tickets).Error
 
-                if err != nil {
+                if queryErr != nil {
                         return response.InternalError(c, "Failed to retrieve tickets")
                 }
 
