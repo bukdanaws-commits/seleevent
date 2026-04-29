@@ -6,6 +6,7 @@ import (
         "fmt"
         "io"
         "net/http"
+        "strconv"
         "time"
 
         "github.com/bukdanaws-commits/seleevent/backend/internal/config"
@@ -14,22 +15,73 @@ import (
         "gorm.io/gorm"
 )
 
+// flexInt is a custom type that can unmarshal from both JSON string and JSON number.
+// Google's tokeninfo API inconsistently returns numeric fields as strings or numbers.
+type flexInt int64
+
+func (f *flexInt) UnmarshalJSON(data []byte) error {
+        // Try number first
+        var n int64
+        if err := json.Unmarshal(data, &n); err == nil {
+                *f = flexInt(n)
+                return nil
+        }
+        // Try string
+        var s string
+        if err := json.Unmarshal(data, &s); err == nil {
+                parsed, err := strconv.ParseInt(s, 10, 64)
+                if err != nil {
+                        return fmt.Errorf("flexInt: cannot parse %q as int64: %w", s, err)
+                }
+                *f = flexInt(parsed)
+                return nil
+        }
+        return fmt.Errorf("flexInt: expected number or string, got %s", string(data))
+}
+
+// flexBool is a custom type that can unmarshal from both JSON string ("true"/"false") and JSON bool.
+// Google's tokeninfo API returns email_verified as a string, not a boolean.
+type flexBool bool
+
+func (f *flexBool) UnmarshalJSON(data []byte) error {
+        // Try bool first
+        var b bool
+        if err := json.Unmarshal(data, &b); err == nil {
+                *f = flexBool(b)
+                return nil
+        }
+        // Try string
+        var s string
+        if err := json.Unmarshal(data, &s); err == nil {
+                parsed, err := strconv.ParseBool(s)
+                if err != nil {
+                        return fmt.Errorf("flexBool: cannot parse %q as bool: %w", s, err)
+                }
+                *f = flexBool(parsed)
+                return nil
+        }
+        return fmt.Errorf("flexBool: expected bool or string, got %s", string(data))
+}
+
 // GoogleTokenInfo represents the response from Google's tokeninfo endpoint.
+// Uses flexInt and flexBool because Google's API inconsistently returns
+// some fields as strings ("12345") vs numbers (12345), and
+// email_verified as string ("true") vs bool (true).
 type GoogleTokenInfo struct {
-        Iss           string `json:"iss"`
-        Sub           string `json:"sub"`           // Google user ID
-        Azp           string `json:"azp"`           // Client ID
-        Aud           string `json:"aud"`           // Client ID (who the token is for)
-        Email         string `json:"email"`
-        EmailVerified string `json:"email_verified"` // Google returns "true"/"false" as string, not bool
-        Name          string `json:"name"`
-        Picture       string `json:"picture"`
-        GivenName     string `json:"given_name"`
-        FamilyName    string `json:"family_name"`
-        Locale        string `json:"locale"`
-        Exp           int64  `json:"exp"`
-        Iat           int64  `json:"iat"`
-        HD            string `json:"hd"` // Hosted domain (for Google Workspace)
+        Iss           string   `json:"iss"`
+        Sub           string   `json:"sub"`           // Google user ID
+        Azp           string   `json:"azp"`           // Client ID
+        Aud           string   `json:"aud"`           // Client ID (who the token is for)
+        Email         string   `json:"email"`
+        EmailVerified flexBool `json:"email_verified"` // Google returns as string "true"/"false" or bool
+        Name          string   `json:"name"`
+        Picture       string   `json:"picture"`
+        GivenName     string   `json:"given_name"`
+        FamilyName    string   `json:"family_name"`
+        Locale        string   `json:"locale"`
+        Exp           flexInt  `json:"exp"`            // Google returns as string or number
+        Iat           flexInt  `json:"iat"`            // Google returns as string or number
+        HD            string   `json:"hd"`              // Hosted domain (for Google Workspace)
 }
 
 // Claims represents custom JWT claims.
@@ -86,8 +138,8 @@ func (s *AuthService) verifyGoogleToken(idToken string) (*GoogleTokenInfo, error
         }
 
         // Verify email is verified (if present)
-        // Google's tokeninfo API returns email_verified as a string "true"/"false"
-        if tokenInfo.Email != "" && tokenInfo.EmailVerified != "true" {
+        // flexBool handles both string "true"/"false" and bool true/false from Google
+        if tokenInfo.Email != "" && !bool(tokenInfo.EmailVerified) {
                 return nil, errors.New("google email is not verified")
         }
 
