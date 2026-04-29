@@ -24,6 +24,7 @@ steps:
       - |
         cd backend
         echo "📦 Downloading Go modules..."
+        go mod tidy
         go mod download
         echo "🔨 Building static binary..."
         SHORT_SHA=${_COMMIT_SHA:0:8}
@@ -85,7 +86,6 @@ steps:
           --no-cpu-throttling \
           --set-env-vars=APP_ENV=$_DEPLOY_ENV,DB_DRIVER=postgres,DB_HOST=/cloudsql/$PROJECT_ID:$_REGION:$_INSTANCE_NAME,DB_NAME=eventku,DB_USER=eventku,DB_PORT=5432,MIDTRANS_IS_SANDBOX=$${MIDTRANS_SANDBOX},STORAGE_BUCKET_NAME=eventku_data \
           --set-secrets=DB_PASSWORD=database-password:latest,JWT_SECRET=jwt-secret:latest,REFRESH_JWT_SECRET=refresh-jwt-secret:latest,GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,MIDTRANS_MERCHANT_ID=midtrans-merchant-id:latest,MIDTRANS_SERVER_KEY=midtrans-server-key:latest,MIDTRANS_CLIENT_KEY=midtrans-client-key:latest \
-          --add-cloudsql-instances=$PROJECT_ID:$_REGION:$_INSTANCE_NAME \
           --service-account=eventku-sa@$PROJECT_ID.iam.gserviceaccount.com \
           --allow-unauthenticated
 

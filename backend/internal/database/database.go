@@ -1,13 +1,19 @@
 package database
 
 import (
+        "context"
+        "database/sql"
         "fmt"
         "log"
+        "net"
         "strings"
         "time"
 
+        "cloud.google.com/go/cloudsqlconn"
         "github.com/bukdanaws-commits/seleevent/backend/internal/config"
         "github.com/bukdanaws-commits/seleevent/backend/internal/models"
+        "github.com/jackc/pgx/v5"
+        pgxstdlib "github.com/jackc/pgx/v5/stdlib"
         "gorm.io/driver/postgres"
         "gorm.io/gorm"
         "gorm.io/gorm/logger"
@@ -20,30 +26,15 @@ const (
 )
 
 // Connect initializes the PostgreSQL database connection.
-// Supports TCP connections (local development) and Unix socket (Cloud Run + Cloud SQL).
-// In production (APP_ENV=production), retries with exponential backoff to handle
-// transient Cloud SQL connection issues during Cloud Run cold starts.
+// Supports three connection modes:
+//  1. Cloud SQL Go Connector (DB_HOST starts with "/cloudsql/") — for Cloud Run
+//     Connects via Public IP using the Cloud SQL Admin API, no VPC connector needed.
+//  2. Unix socket (DB_HOST starts with "/" but not "/cloudsql/") — for manual proxy
+//  3. TCP (DB_HOST is hostname/IP) — for local development
 func Connect(cfg config.Config) (*gorm.DB, error) {
-        var dsn string
         sslmode := cfg.DB.SSLMode
         if sslmode == "" {
                 sslmode = "disable"
-        }
-
-        if strings.HasPrefix(cfg.DB.Host, "/") {
-                // Unix socket connection (Cloud Run + Cloud SQL proxy)
-                dsn = fmt.Sprintf(
-                        "host=%s user=%s password=%s dbname=%s sslmode=%s",
-                        cfg.DB.Host, cfg.DB.User, cfg.DB.Password, cfg.DB.Name, sslmode,
-                )
-                log.Printf("Database: connecting via Unix socket at %s", cfg.DB.Host)
-        } else {
-                // TCP connection (local development)
-                dsn = fmt.Sprintf(
-                        "host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-                        cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Password, cfg.DB.Name, sslmode,
-                )
-                log.Printf("Database: connecting via TCP to %s:%s", cfg.DB.Host, cfg.DB.Port)
         }
 
         // ── Retry logic for Cloud Run cold starts ──────────────────────────
@@ -57,25 +48,34 @@ func Connect(cfg config.Config) (*gorm.DB, error) {
         var db *gorm.DB
         var err error
 
-        for attempt := 1; attempt <= retries; attempt++ {
-                db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
-                if err == nil {
-                        break
-                }
+        if strings.HasPrefix(cfg.DB.Host, "/cloudsql/") {
+                // ── Cloud SQL Go Connector (Cloud Run) ────────────────────────────
+                // Uses the Cloud SQL Admin API to discover instance IP and connect
+                // directly via Public IP. No VPC connector or Unix socket needed.
+                instanceConnName := strings.TrimPrefix(cfg.DB.Host, "/cloudsql/")
+                log.Printf("Database: connecting via Cloud SQL Go Connector to %s", instanceConnName)
 
-                if attempt < retries {
-                        backoff := initialBackoff * time.Duration(1<<(attempt-1))
-                        if backoff > maxBackoff {
-                                backoff = maxBackoff
-                        }
-                        log.Printf("Database: connection attempt %d/%d failed: %v", attempt, retries, err)
-                        log.Printf("Database: retrying in %v...", backoff)
-                        time.Sleep(backoff)
-                }
+                db, err = connectWithCloudSQLConnector(cfg, instanceConnName, retries)
+        } else if strings.HasPrefix(cfg.DB.Host, "/") {
+                // ── Unix socket (manual cloud-sql-proxy) ──────────────────────────
+                dsn := fmt.Sprintf(
+                        "host=%s user=%s password=%s dbname=%s sslmode=%s",
+                        cfg.DB.Host, cfg.DB.User, cfg.DB.Password, cfg.DB.Name, sslmode,
+                )
+                log.Printf("Database: connecting via Unix socket at %s", cfg.DB.Host)
+                db, err = connectWithDSN(dsn, retries)
+        } else {
+                // ── TCP connection (local development) ────────────────────────────
+                dsn := fmt.Sprintf(
+                        "host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+                        cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Password, cfg.DB.Name, sslmode,
+                )
+                log.Printf("Database: connecting via TCP to %s:%s", cfg.DB.Host, cfg.DB.Port)
+                db, err = connectWithDSN(dsn, retries)
         }
 
         if err != nil {
-                return nil, fmt.Errorf("failed to connect to PostgreSQL after %d attempts: %w", retries, err)
+                return nil, err
         }
 
         // Configure connection pool for PostgreSQL
@@ -118,6 +118,124 @@ func Connect(cfg config.Config) (*gorm.DB, error) {
         sqlDB.Exec("CREATE EXTENSION IF NOT EXISTS pgcrypto")
 
         log.Println("PostgreSQL connected and migrated successfully")
+        return db, nil
+}
+
+// connectWithCloudSQLConnector uses the Cloud SQL Go Connector to connect
+// directly via Public IP without needing a Unix socket or VPC connector.
+func connectWithCloudSQLConnector(cfg config.Config, instanceConnName string, retries int) (*gorm.DB, error) {
+        ctx := context.Background()
+
+        // Create the Cloud SQL dialer
+        // This uses the Cloud SQL Admin API to discover the instance's IP address
+        // and establishes a direct TLS-encrypted connection via Public IP.
+        // No VPC connector needed — this bypasses the built-in Unix socket proxy.
+        dialer, err := cloudsqlconn.NewDialer(ctx)
+        if err != nil {
+                return nil, fmt.Errorf("failed to create Cloud SQL dialer: %w", err)
+        }
+
+        // Build pgx config with custom dialer that routes through Cloud SQL connector
+        pgxConfig, err := pgx.ParseConfig(fmt.Sprintf(
+                "user=%s password=%s dbname=%s sslmode=disable",
+                cfg.DB.User, cfg.DB.Password, cfg.DB.Name,
+        ))
+        if err != nil {
+                dialer.Close()
+                return nil, fmt.Errorf("failed to parse pgx config: %w", err)
+        }
+
+        // Override the dial function to use Cloud SQL connector
+        pgxConfig.DialFunc = func(ctx context.Context, network, addr string) (net.Conn, error) {
+                conn, err := dialer.Dial(ctx, instanceConnName)
+                if err != nil {
+                        log.Printf("Cloud SQL Connector: dial failed: %v", err)
+                }
+                return conn, err
+        }
+
+        var db *gorm.DB
+
+        for attempt := 1; attempt <= retries; attempt++ {
+                // Create a new *sql.DB from pgx config for each attempt
+                sqlDB := pgxstdlib.OpenDB(*pgxConfig)
+
+                // Test the connection
+                if pingErr := sqlDB.PingContext(ctx); pingErr != nil {
+                        sqlDB.Close()
+                        if attempt < retries {
+                                backoff := initialBackoff * time.Duration(1<<(attempt-1))
+                                if backoff > maxBackoff {
+                                        backoff = maxBackoff
+                                }
+                                log.Printf("Database: Cloud SQL Connector attempt %d/%d failed: %v", attempt, retries, pingErr)
+                                log.Printf("Database: retrying in %v...", backoff)
+                                time.Sleep(backoff)
+                                continue
+                        }
+                        dialer.Close()
+                        return nil, fmt.Errorf("failed to connect via Cloud SQL Connector after %d attempts: %w", retries, pingErr)
+                }
+
+                // Connection successful — open GORM with existing *sql.DB
+                gormDB, gormErr := gorm.Open(postgres.New(postgres.Config{
+                        Conn: sqlDB,
+                }), &gorm.Config{})
+
+                if gormErr != nil {
+                        sqlDB.Close()
+                        if attempt < retries {
+                                backoff := initialBackoff * time.Duration(1<<(attempt-1))
+                                if backoff > maxBackoff {
+                                        backoff = maxBackoff
+                                }
+                                log.Printf("Database: GORM open attempt %d/%d failed: %v", attempt, retries, gormErr)
+                                log.Printf("Database: retrying in %v...", backoff)
+                                time.Sleep(backoff)
+                                continue
+                        }
+                        dialer.Close()
+                        return nil, fmt.Errorf("failed to open GORM after %d attempts: %w", retries, gormErr)
+                }
+
+                db = gormDB
+                break
+        }
+
+        // Note: we don't close the dialer here because it's used for the lifetime
+        // of the application. It will be cleaned up when the process exits.
+        // The dialer maintains a connection pool internally.
+
+        log.Printf("Database: Cloud SQL Connector connected successfully to %s", instanceConnName)
+        return db, nil
+}
+
+// connectWithDSN connects using a standard DSN string with retry logic.
+func connectWithDSN(dsn string, retries int) (*gorm.DB, error) {
+        var db *gorm.DB
+        var err error
+
+        for attempt := 1; attempt <= retries; attempt++ {
+                db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+                if err == nil {
+                        break
+                }
+
+                if attempt < retries {
+                        backoff := initialBackoff * time.Duration(1<<(attempt-1))
+                        if backoff > maxBackoff {
+                                backoff = maxBackoff
+                        }
+                        log.Printf("Database: connection attempt %d/%d failed: %v", attempt, retries, err)
+                        log.Printf("Database: retrying in %v...", backoff)
+                        time.Sleep(backoff)
+                }
+        }
+
+        if err != nil {
+                return nil, fmt.Errorf("failed to connect to PostgreSQL after %d attempts: %w", retries, err)
+        }
+
         return db, nil
 }
 
