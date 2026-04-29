@@ -75,3 +75,20 @@ Stage Summary:
 - Seed data fully regenerated with valid UUIDs
 - Committed and pushed to GitHub (abef8f4)
 - User needs to: pull latest code, redeploy, reseed with fixed scripts
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Fix Google Login - email_verified type mismatch
+
+Work Log:
+- Diagnosed error: `json: cannot unmarshal string into Go struct field GoogleTokenInfo.email_verified of type bool`
+- Root cause: Google's tokeninfo API returns `email_verified` as a string ("true"/"false"), not a boolean
+- Fixed `backend/internal/services/auth_service.go`: Changed `EmailVerified` from `bool` to `string`
+- Updated verification check from `!tokenInfo.EmailVerified` to `tokenInfo.EmailVerified != "true"`
+- Committed and pushed to GitHub: 1077dca → origin/main
+- gcloud CLI not available in dev environment — deployment must be triggered from Cloud Shell
+
+Stage Summary:
+- Google Login fix committed and pushed (1077dca)
+- User needs to deploy from Cloud Shell: `cd seleevent && git pull && ./gcp/deploy-from-cloudshell.sh staging`
