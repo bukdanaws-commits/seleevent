@@ -51,24 +51,26 @@ steps:
     waitFor: ['install-deps']
 
   # ── Build Docker image ────────────────────────────────────────────────────
+  # Use bash entrypoint so Cloud Build substitutions are resolved by shell
+  # before being passed as Docker build-args (avoids "invalid substitution key" error)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-image'
+    entrypoint: 'bash'
     args:
-      - 'build'
-      - '-t'
-      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/$_SERVICE_NAME:$_COMMIT_SHA'
-      - '-t'
-      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/$_SERVICE_NAME:latest'
-      - '-f'
-      - 'Dockerfile.frontend'
-      - '--build-arg=NEXT_PUBLIC_API_URL=$_BACKEND_URL'
-      - '--build-arg=NEXT_PUBLIC_GO_PORT=8080'
-      - '--build-arg=NEXT_PUBLIC_USE_DIRECT_BACKEND=true'
-      - '--build-arg=NEXT_PUBLIC_MOCK_MODE=false'
-      - '--build-arg=NEXT_PUBLIC_MIDTRANS_CLIENT_KEY=$_MIDTRANS_CLIENT_KEY'
-      - '--build-arg=NEXT_PUBLIC_MIDTRANS_IS_SANDBOX=$_MIDTRANS_IS_SANDBOX'
-      - '--build-arg=NEXT_PUBLIC_GOOGLE_CLIENT_ID=$_GOOGLE_CLIENT_ID'
-      - '.'
+      - '-c'
+      - |
+        docker build \
+          -t $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/$_SERVICE_NAME:$_COMMIT_SHA \
+          -t $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/$_SERVICE_NAME:latest \
+          -f Dockerfile.frontend \
+          --build-arg=NEXT_PUBLIC_API_URL=$_BACKEND_URL \
+          --build-arg=NEXT_PUBLIC_GO_PORT=8080 \
+          --build-arg=NEXT_PUBLIC_USE_DIRECT_BACKEND=true \
+          --build-arg=NEXT_PUBLIC_MOCK_MODE=false \
+          --build-arg=NEXT_PUBLIC_MIDTRANS_CLIENT_KEY=$_MIDTRANS_CLIENT_KEY \
+          --build-arg=NEXT_PUBLIC_MIDTRANS_IS_SANDBOX=$_MIDTRANS_IS_SANDBOX \
+          --build-arg=NEXT_PUBLIC_GOOGLE_CLIENT_ID=$_GOOGLE_CLIENT_ID \
+          .
     waitFor: ['build-nextjs']
 
   # ── Push to Artifact Registry ─────────────────────────────────────────────
