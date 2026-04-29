@@ -2,7 +2,7 @@
 // Centralized API endpoint constants + fetch client
 // Backend: Golang Fiber v2 (Port 8080)
 //
-// Two deployment modes:
+// Three deployment modes:
 //   1. LOCAL DEV (Caddy gateway): requests go through Caddy via XTransformPort
 //      - NEXT_PUBLIC_USE_DIRECT_BACKEND is NOT set (or 'false')
 //      - NEXT_PUBLIC_API_URL is empty or not set
@@ -12,6 +12,11 @@
 //      - NEXT_PUBLIC_USE_DIRECT_BACKEND=true
 //      - NEXT_PUBLIC_API_URL=https://eventku-api-xxxxx-xx.a.run.app
 //      - No Caddy proxy — FE → BE directly
+//
+//   3. MOCK MODE: FE calls local Next.js API routes that serve mock data
+//      - NEXT_PUBLIC_MOCK_MODE=true
+//      - URL pattern: /api/v1/... (no XTransformPort, no external backend)
+//      - Used for dashboard simulation without running the Go backend
 
 import type {
   ICheckTicketRequest,
@@ -31,6 +36,9 @@ import type {
 
 // ─── CONFIG ─────────────────────────────────────────────────────────────────
 
+// Mock mode: FE calls local Next.js API routes instead of Go backend
+const MOCK_MODE = process.env.NEXT_PUBLIC_MOCK_MODE === 'true'
+
 // Cloud Run: full backend URL (e.g. https://eventku-api-xxxxx.a.run.app)
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || ''
 
@@ -42,6 +50,10 @@ const GO_BACKEND_PORT = process.env.NEXT_PUBLIC_GO_PORT || '8080'
 const USE_DIRECT_BACKEND = process.env.NEXT_PUBLIC_USE_DIRECT_BACKEND === 'true'
 
 function getBaseUrl(): string {
+  // Mock mode: use local Next.js API routes (no port forwarding needed)
+  if (MOCK_MODE) {
+    return ''
+  }
   if (USE_DIRECT_BACKEND && API_BASE) {
     // Cloud Run: use the full backend URL directly (no Caddy proxy)
     return API_BASE
