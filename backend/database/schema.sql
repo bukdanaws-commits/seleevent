@@ -80,9 +80,12 @@ CREATE TABLE subscriptions (
     created_at      TIMESTAMPTZ     NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ     NOT NULL DEFAULT now(),
 
-    CONSTRAINT uq_subscriptions_tenant_active UNIQUE (tenant_id)
-        WHERE cancelled_at IS NULL
+    CONSTRAINT uq_subscriptions_tenant UNIQUE (tenant_id)
 );
+
+-- Partial unique index: only one active (non-cancelled) subscription per tenant
+CREATE UNIQUE INDEX uq_subscriptions_tenant_active ON subscriptions (tenant_id)
+    WHERE cancelled_at IS NULL;
 
 COMMENT ON TABLE subscriptions IS 'SaaS billing subscriptions — one active subscription per tenant.';
 

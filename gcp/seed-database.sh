@@ -83,7 +83,7 @@ if command -v cloud-sql-proxy &>/dev/null; then
 
   # Start cloud-sql-proxy in background
   info "Starting Cloud SQL Proxy on port $DB_PORT..."
-  cloud-sql-proxy "$PROJECT_ID:$REGION:$INSTANCE_NAME" --port=$DB_PORT &
+  cloud-sql-proxy "$PROJECT_ID:$REGION:$INSTANCE_NAME" --port=$DB_PORT --private-ip &
   PROXY_PID=$!
 
   # Wait for proxy to be ready

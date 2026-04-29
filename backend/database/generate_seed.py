@@ -31,42 +31,50 @@ rng = SeededRandom(42)
 
 # ─── ID helpers ───────────────────────────────────────────────────────────────
 
+# All UUIDs MUST use only hex digits (0-9, a-f) to be valid PostgreSQL uuid type.
+# Entity prefix mapping (first 8 hex chars):
+#   10000000 = tenant,  11000000 = subscription
+#   20000000 = user,    30000000 = event
+#   40000000 = ticket_type, 50000000 = order
+#   60000000 = counter, 70000000 = gate
+#   80000000 = ticket
+
 def user_id(short_id):
-    """e.g. u001 -> 'u0000000-0000-0000-0000-000000000001'"""
+    """e.g. 1 -> '20000000-0000-0000-0000-000000000001'"""
     suffix = f"{short_id:012d}"
-    return f"u0000000-0000-0000-0000-{suffix}"
+    return f"20000000-0000-0000-0000-{suffix}"
 
 def tenant_id(short_id=1):
     suffix = f"{short_id:012d}"
-    return f"t0000000-0000-0000-0000-{suffix}"
+    return f"10000000-0000-0000-0000-{suffix}"
 
 def sub_id(short_id=1):
     suffix = f"{short_id:012d}"
-    return f"s0000000-0000-0000-0000-{suffix}"
+    return f"11000000-0000-0000-0000-{suffix}"
 
 def event_id(short_id):
     suffix = f"{short_id:012d}"
-    return f"e0000000-0000-0000-0000-{suffix}"
+    return f"30000000-0000-0000-0000-{suffix}"
 
 def tt_id(short_id):
     suffix = f"{short_id:012d}"
-    return f"tt000000-0000-0000-0000-{suffix}"
+    return f"40000000-0000-0000-0000-{suffix}"
 
 def order_id(short_id):
     suffix = f"{short_id:012d}"
-    return f"o0000000-0000-0000-0000-{suffix}"
+    return f"50000000-0000-0000-0000-{suffix}"
 
 def ticket_id(short_id):
     suffix = f"{short_id:012d}"
-    return f"tk000000-0000-0000-0000-{suffix}"
+    return f"80000000-0000-0000-0000-{suffix}"
 
 def counter_id(short_id):
     suffix = f"{short_id:012d}"
-    return f"c0000000-0000-0000-0000-{suffix}"
+    return f"60000000-0000-0000-0000-{suffix}"
 
 def gate_id(short_id):
     suffix = f"{short_id:012d}"
-    return f"g0000000-0000-0000-0000-{suffix}"
+    return f"70000000-0000-0000-0000-{suffix}"
 
 # ─── Code generators ─────────────────────────────────────────────────────────
 
@@ -1335,10 +1343,10 @@ def generate_sql():
 
                 t_values.append('(' + ', '.join(cols) + ')')
 
-            w("INSERT INTO tickets (id, tenant_id, order_id, ticket_type_id, event_id, ticket_code, attendee_name, attendee_email, seat_label, qr_data, wristband_code, event_title, ticket_type_name, status, redeemed_at, redeemed_by) VALUES")
-            # Split large batches
+            # Split large batches - each batch needs its own INSERT INTO header
             for j in range(0, len(t_values), 15):
                 batch = t_values[j:j+15]
+                w("INSERT INTO tickets (id, tenant_id, order_id, ticket_type_id, event_id, ticket_code, attendee_name, attendee_email, seat_label, qr_data, wristband_code, event_title, ticket_type_name, status, redeemed_at, redeemed_by) VALUES")
                 w(',\n'.join(batch) + ';')
                 if j + 15 < len(t_values):
                     w()  # Extra spacing between batches
@@ -1349,7 +1357,6 @@ def generate_sql():
     w("-- 16. REDEMPTIONS")
     w("-- ============================================================================")
     w()
-    w("INSERT INTO redemptions (tenant_id, ticket_id, counter_id, staff_id, wristband_code, wristband_color, wristband_type, notes, redeemed_at) VALUES")
     r_values = []
     for r in ALL_REDEMPTIONS:
         r_values.append(
@@ -1358,9 +1365,10 @@ def generate_sql():
             f"'{r['wristband_code']}', '{r['wristband_color']}', '{r['wristband_type']}', "
             f"NULL, '{r['redeemed_at']}')"
         )
-    # Split into batches
+    # Split into batches - each batch needs its own INSERT INTO header
     for i in range(0, len(r_values), 15):
         batch = r_values[i:i+15]
+        w("INSERT INTO redemptions (tenant_id, ticket_id, counter_id, staff_id, wristband_code, wristband_color, wristband_type, notes, redeemed_at) VALUES")
         w(',\n'.join(batch) + ';')
         if i + 15 < len(r_values):
             w()
@@ -1371,7 +1379,6 @@ def generate_sql():
     w("-- 17. GATE LOGS")
     w("-- ============================================================================")
     w()
-    w("INSERT INTO gate_logs (id, tenant_id, ticket_id, gate_id, staff_id, event_id, action, notes, scanned_at) VALUES")
     gl_values = []
     for gl in ALL_GATE_LOGS:
         gl_values.append(
@@ -1382,6 +1389,7 @@ def generate_sql():
         )
     for i in range(0, len(gl_values), 15):
         batch = gl_values[i:i+15]
+        w("INSERT INTO gate_logs (id, tenant_id, ticket_id, gate_id, staff_id, event_id, action, notes, scanned_at) VALUES")
         w(',\n'.join(batch) + ';')
         if i + 15 < len(gl_values):
             w()
@@ -1411,7 +1419,6 @@ def generate_sql():
     w("-- 19. NOTIFICATIONS")
     w("-- ============================================================================")
     w()
-    w("INSERT INTO notifications (id, tenant_id, user_id, event_id, title, message, type, category, is_read) VALUES")
     n_values = []
     for n in ALL_NOTIFICATIONS:
         n_values.append(
@@ -1421,6 +1428,7 @@ def generate_sql():
         )
     for i in range(0, len(n_values), 15):
         batch = n_values[i:i+15]
+        w("INSERT INTO notifications (id, tenant_id, user_id, event_id, title, message, type, category, is_read) VALUES")
         w(',\n'.join(batch) + ';')
         if i + 15 < len(n_values):
             w()
