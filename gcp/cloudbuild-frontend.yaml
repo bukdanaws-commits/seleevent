@@ -108,9 +108,9 @@ substitutions:
   _DEPLOY_ENV: staging
   _SERVICE_NAME: eventku-web-staging
   _BACKEND_URL: https://eventku-api-staging-xxxxx.a.run.app
-  _MIDTRANS_CLIENT_KEY: Mid-client-sJtCsptoF8hoaFgN
+  _MIDTRANS_CLIENT_KEY: REPLACE_IN_DEPLOY_SCRIPT
   _MIDTRANS_IS_SANDBOX: 'true'
-  _GOOGLE_CLIENT_ID: 503551786622-k3uajo9c2d6om6qnqofsa3b47fvo5o6g.apps.googleusercontent.com
+  _GOOGLE_CLIENT_ID: REPLACE_IN_DEPLOY_SCRIPT
   _COMMIT_SHA: manual
 
 # ── Build options ───────────────────────────────────────────────────────────

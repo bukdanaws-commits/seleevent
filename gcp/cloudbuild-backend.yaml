@@ -97,6 +97,7 @@ substitutions:
   _REGION: asia-southeast2
   _INSTANCE_NAME: eventku
   _REPO: eventku
+  _SERVICE_NAME: eventku-api-staging
   _COMMIT_SHA: manual
   _DEPLOY_ENV: staging
 
