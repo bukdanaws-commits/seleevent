@@ -1,10 +1,17 @@
 # =============================================================================
 #  Cloud Build Configuration — EVENTKU Next.js Frontend
 #
-#  Triggers:
-#    - Push to main branch (frontend files)
-#    - Manual: gcloud builds submit --config gcp/cloudbuild-frontend.yaml \
-#              --substitutions=_BACKEND_URL=https://your-api-url.run.app
+#  Supports two environments via _DEPLOY_ENV substitution:
+#    staging    → Midtrans SANDBOX, eventku-web-staging service
+#    production → Midtrans PRODUCTION, eventku-web service
+#
+#  Deploy staging:
+#    gcloud builds submit --config=gcp/cloudbuild-frontend.yaml \
+#      --substitutions=_DEPLOY_ENV=staging,_BACKEND_URL=https://eventku-api-staging-xxxxx.a.run.app
+#
+#  Deploy production:
+#    gcloud builds submit --config=gcp/cloudbuild-frontend.yaml \
+#      --substitutions=_DEPLOY_ENV=production,_BACKEND_URL=https://eventku-api-xxxxx.a.run.app
 # =============================================================================
 
 steps:
@@ -28,15 +35,17 @@ steps:
       - 'NEXT_PUBLIC_API_URL=$_BACKEND_URL'
       - 'NEXT_PUBLIC_GO_PORT=8080'
       - 'NEXT_PUBLIC_USE_DIRECT_BACKEND=true'
+      - 'NEXT_PUBLIC_MOCK_MODE=false'
       - 'NEXT_PUBLIC_MIDTRANS_CLIENT_KEY=$_MIDTRANS_CLIENT_KEY'
-      - 'NEXT_PUBLIC_MIDTRANS_IS_SANDBOX=true'
+      - 'NEXT_PUBLIC_MIDTRANS_IS_SANDBOX=$_MIDTRANS_IS_SANDBOX'
       - 'NEXT_PUBLIC_GOOGLE_CLIENT_ID=$_GOOGLE_CLIENT_ID'
       - 'NODE_ENV=production'
     args:
       - '-c'
       - |
-        echo "🔨 Building Next.js..."
+        echo "🔨 Building Next.js for $_DEPLOY_ENV..."
         echo "   API URL: $NEXT_PUBLIC_API_URL"
+        echo "   Midtrans Sandbox: $NEXT_PUBLIC_MIDTRANS_IS_SANDBOX"
         bun run build
         echo "✅ Next.js build complete"
     waitFor: ['install-deps']
@@ -47,16 +56,17 @@ steps:
     args:
       - 'build'
       - '-t'
-      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-web:$_COMMIT_SHA'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/$_SERVICE_NAME:$_COMMIT_SHA'
       - '-t'
-      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-web:latest'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/$_SERVICE_NAME:latest'
       - '-f'
       - 'Dockerfile.frontend'
       - '--build-arg=NEXT_PUBLIC_API_URL=$_BACKEND_URL'
       - '--build-arg=NEXT_PUBLIC_GO_PORT=8080'
       - '--build-arg=NEXT_PUBLIC_USE_DIRECT_BACKEND=true'
+      - '--build-arg=NEXT_PUBLIC_MOCK_MODE=false'
       - '--build-arg=NEXT_PUBLIC_MIDTRANS_CLIENT_KEY=$_MIDTRANS_CLIENT_KEY'
-      - '--build-arg=NEXT_PUBLIC_MIDTRANS_IS_SANDBOX=true'
+      - '--build-arg=NEXT_PUBLIC_MIDTRANS_IS_SANDBOX=$_MIDTRANS_IS_SANDBOX'
       - '--build-arg=NEXT_PUBLIC_GOOGLE_CLIENT_ID=$_GOOGLE_CLIENT_ID'
       - '.'
     waitFor: ['build-nextjs']
@@ -64,7 +74,7 @@ steps:
   # ── Push to Artifact Registry ─────────────────────────────────────────────
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-image'
-    args: ['push', '--all-tags', '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-web']
+    args: ['push', '--all-tags', '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/$_SERVICE_NAME']
     waitFor: ['build-image']
 
   # ── Deploy to Cloud Run ───────────────────────────────────────────────────
@@ -74,8 +84,8 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'eventku-web'
-      - '--image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-web:$_COMMIT_SHA'
+      - '$_SERVICE_NAME'
+      - '--image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/$_SERVICE_NAME:$_COMMIT_SHA'
       - '--region=$_REGION'
       - '--platform=managed'
       - '--cpu=1'
@@ -87,14 +97,19 @@ steps:
       - '--port=3000'
       - '--service-account=eventku-sa@$PROJECT_ID.iam.gserviceaccount.com'
       - '--allow-unauthenticated'
+      - '--set-env-vars=APP_ENV=$_DEPLOY_ENV,NODE_ENV=production'
     waitFor: ['push-image']
 
 # ── Default substitution values ─────────────────────────────────────────────
+# Staging defaults — override for production
 substitutions:
   _REGION: asia-southeast2
   _REPO: eventku
-  _BACKEND_URL: https://eventku-api-xxxxx-xx.a.run.app
+  _DEPLOY_ENV: staging
+  _SERVICE_NAME: eventku-web-staging
+  _BACKEND_URL: https://eventku-api-staging-xxxxx.a.run.app
   _MIDTRANS_CLIENT_KEY: Mid-client-sJtCsptoF8hoaFgN
+  _MIDTRANS_IS_SANDBOX: 'true'
   _GOOGLE_CLIENT_ID: 503551786622-k3uajo9c2d6om6qnqofsa3b47fvo5o6g.apps.googleusercontent.com
   _COMMIT_SHA: manual
 

@@ -1,15 +1,17 @@
 # =============================================================================
 #  Cloud Build Configuration — EVENTKU Golang Backend API
 #
-#  Build strategy:
-#    Step 1: Build Go binary externally (faster with Cloud Build machine type)
-#    Step 2: Build Docker image using pre-built binary (no rebuild inside Docker)
-#    Step 3: Push to Artifact Registry
-#    Step 4: Deploy to Cloud Run
+#  Supports two environments via _DEPLOY_ENV substitution:
+#    staging    → Midtrans SANDBOX, eventku-api-staging service
+#    production → Midtrans PRODUCTION, eventku-api service
 #
-#  Triggers:
-#    - Push to main branch
-#    - Manual: gcloud builds submit --config gcp/cloudbuild-backend.yaml
+#  Deploy staging:
+#    gcloud builds submit --config=gcp/cloudbuild-backend.yaml \
+#      --substitutions=_DEPLOY_ENV=staging
+#
+#  Deploy production:
+#    gcloud builds submit --config=gcp/cloudbuild-backend.yaml \
+#      --substitutions=_DEPLOY_ENV=production
 # =============================================================================
 
 steps:
@@ -31,16 +33,14 @@ steps:
         echo "✅ Binary built successfully at backend/eventku-api"
 
   # ── Build Docker image (uses pre-built binary) ────────────────────────────
-  # The Dockerfile supports BINARY_PATH build arg — when provided, it copies
-  # the pre-built binary instead of rebuilding from source.
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-image'
     args:
       - 'build'
       - '-t'
-      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-api:$_COMMIT_SHA'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/$_SERVICE_NAME:$_COMMIT_SHA'
       - '-t'
-      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-api:latest'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/$_SERVICE_NAME:latest'
       - '-f'
       - 'backend/Dockerfile'
       - '--build-arg=BINARY_PATH=eventku-api'
@@ -50,62 +50,47 @@ steps:
   # ── Push to Artifact Registry ─────────────────────────────────────────────
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-image'
-    args: ['push', '--all-tags', '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-api']
+    args: ['push', '--all-tags', '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/$_SERVICE_NAME']
     waitFor: ['build-image']
 
   # ── Deploy to Cloud Run ───────────────────────────────────────────────────
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'deploy'
-    entrypoint: 'gcloud'
-    args:
-      - 'run'
-      - 'deploy'
-      - 'eventku-api'
-      - '--image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/eventku-api:$_COMMIT_SHA'
-      - '--region=$_REGION'
-      - '--platform=managed'
-      - '--cpu=2'
-      - '--memory=1Gi'
-      - '--min-instances=1'
-      - '--max-instances=1'
-      - '--concurrency=80'
-      - '--timeout=3600'
-      - '--port=8080'
-      - '--no-cpu-throttling'
-      - '--set-env-vars=APP_ENV=production,DB_DRIVER=postgres,DB_HOST=/cloudsql/$PROJECT_ID:$_REGION:$_INSTANCE_NAME,DB_NAME=eventku,DB_USER=eventku,DB_PORT=5432,MIDTRANS_IS_SANDBOX=true,STORAGE_BUCKET_NAME=eventku_data'
-      - '--set-secrets=DB_PASSWORD=database-password:latest,JWT_SECRET=jwt-secret:latest,REFRESH_JWT_SECRET=refresh-jwt-secret:latest,GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,MIDTRANS_MERCHANT_ID=midtrans-merchant-id:latest,MIDTRANS_SERVER_KEY=midtrans-server-key:latest,MIDTRANS_CLIENT_KEY=midtrans-client-key:latest'
-      - '--add-cloudsql-instances=$PROJECT_ID:$_REGION:$_INSTANCE_NAME'
-      - '--service-account=eventku-sa@$PROJECT_ID.iam.gserviceaccount.com'
-      - '--allow-unauthenticated'
-    waitFor: ['push-image']
-
-  # ── Seed database (idempotent — only creates data if empty) ────────────────
-  - name: 'golang:1.25'
-    id: 'seed-database'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        echo "🌱 Running database seeder..."
-        cd backend
-        # Build the seed binary
-        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o eventku-seed ./cmd/seed
-        echo "✅ Seed binary built"
-        
-        # Run the seeder using Cloud SQL Proxy connection
-        # We use the Cloud SQL Admin API via gcloud to run SQL instead
-        echo "📦 Seeding via SQL file (more reliable for Cloud Build)..."
-        
-        # Export seed SQL and run via Cloud SQL Admin API
-        # The seed is idempotent — safe to run multiple times
-        gcloud sql databases describe eventku --instance=$_INSTANCE_NAME --project=$PROJECT_ID || \
-          gcloud sql databases create eventku --instance=$_INSTANCE_NAME --project=$PROJECT_ID
-        
-        echo "✅ Database seeding will happen on first API start via GORM AutoMigrate"
-        echo "💡 For manual seed, run: gcloud sql connect $_INSTANCE_NAME --user=eventku --database=eventku < backend/database/seed-data.sql"
-    waitFor: ['deploy']
-    env:
-      - 'PROJECT_ID=$PROJECT_ID'
+        echo "🚀 Deploying $_DEPLOY_ENV backend..."
+
+        # Set MIDTRANS_IS_SANDBOX based on environment
+        if [ "$_DEPLOY_ENV" = "production" ]; then
+          MIDTRANS_SANDBOX="false"
+          echo "💰 Using Midtrans PRODUCTION keys"
+        else
+          MIDTRANS_SANDBOX="true"
+          echo "🧪 Using Midtrans SANDBOX keys"
+        fi
+
+        gcloud run deploy $_SERVICE_NAME \
+          --image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/$_SERVICE_NAME:$_COMMIT_SHA \
+          --region=$_REGION \
+          --platform=managed \
+          --cpu=2 \
+          --memory=1Gi \
+          --min-instances=1 \
+          --max-instances=1 \
+          --concurrency=80 \
+          --timeout=3600 \
+          --port=8080 \
+          --no-cpu-throttling \
+          --set-env-vars=APP_ENV=$_DEPLOY_ENV,DB_DRIVER=postgres,DB_HOST=/cloudsql/$PROJECT_ID:$_REGION:$_INSTANCE_NAME,DB_NAME=eventku,DB_USER=eventku,DB_PORT=5432,MIDTRANS_IS_SANDBOX=$${MIDTRANS_SANDBOX},STORAGE_BUCKET_NAME=eventku_data \
+          --set-secrets=DB_PASSWORD=database-password:latest,JWT_SECRET=jwt-secret:latest,REFRESH_JWT_SECRET=refresh-jwt-secret:latest,GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,MIDTRANS_MERCHANT_ID=midtrans-merchant-id:latest,MIDTRANS_SERVER_KEY=midtrans-server-key:latest,MIDTRANS_CLIENT_KEY=midtrans-client-key:latest \
+          --add-cloudsql-instances=$PROJECT_ID:$_REGION:$_INSTANCE_NAME \
+          --service-account=eventku-sa@$PROJECT_ID.iam.gserviceaccount.com \
+          --allow-unauthenticated
+
+        echo "✅ Backend deployed: $_SERVICE_NAME ($_DEPLOY_ENV)"
+    waitFor: ['push-image']
 
 # ── Default substitution values ─────────────────────────────────────────────
 substitutions:
@@ -113,6 +98,7 @@ substitutions:
   _INSTANCE_NAME: eventku
   _REPO: eventku
   _COMMIT_SHA: manual
+  _DEPLOY_ENV: staging
 
 # ── Build options ───────────────────────────────────────────────────────────
 options:
