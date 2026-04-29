@@ -91,7 +91,26 @@ if [ "$DEPLOY_ENV" = "production" ]; then
   fi
 fi
 
-# ── Get secrets from env vars ───────────────────────────────────────────────
+# ── Auto-load secrets from ~/.seleevent-env if available ───────────────────
+SECRETS_FILE="$HOME/.seleevent-env"
+if [ -f "$SECRETS_FILE" ]; then
+  info "Loading secrets from $SECRETS_FILE..."
+  source "$SECRETS_FILE"
+  info "  ✅ Secrets loaded from file"
+else
+  warn "No $SECRETS_FILE found — will prompt for missing secrets"
+  warn "Create it with: cat > ~/.seleevent-env << 'EOF'"
+  warn "  export DB_PASSWORD=\"your-db-password\""
+  warn "  export GOOGLE_CLIENT_ID=\"your-client-id\""
+  warn "  export GOOGLE_CLIENT_SECRET=\"your-client-secret\""
+  warn "  export MIDTRANS_SERVER_KEY=\"your-server-key\""
+  warn "  export MIDTRANS_CLIENT_KEY=\"your-client-key\""
+  warn "  export MIDTRANS_MERCHANT_ID=\"your-merchant-id\""
+  warn "EOF"
+  echo ""
+fi
+
+# ── Get secrets: env var → prompt ─────────────────────────────────────────
 get_secret() {
   local name="$1"
   local prompt="$2"
@@ -109,18 +128,21 @@ get_secret() {
 }
 
 info "Collecting secrets..."
-DB_PASSWORD=$(get_secret "DB_PASSWORD" "Enter database password" "DB_PASSWORD")
-GOOGLE_CLIENT_ID=$(get_secret "GOOGLE_CLIENT_ID" "Enter Google OAuth Client ID" "GOOGLE_CLIENT_ID")
-GOOGLE_CLIENT_SECRET=$(get_secret "GOOGLE_CLIENT_SECRET" "Enter Google OAuth Client Secret" "GOOGLE_CLIENT_SECRET")
-
-# Select Midtrans keys based on environment
-if [ "$DEPLOY_ENV" = "production" ]; then
-  MIDTRANS_SERVER_KEY=$(get_secret "MIDTRANS_PRODUCTION_SERVER_KEY" "Enter Midtrans PRODUCTION Server Key" "MIDTRANS_PRODUCTION_SERVER_KEY")
-  MIDTRANS_CLIENT_KEY=$(get_secret "MIDTRANS_PRODUCTION_CLIENT_KEY" "Enter Midtrans PRODUCTION Client Key" "MIDTRANS_PRODUCTION_CLIENT_KEY")
+if [ "$DEPLOY_ENV" = "staging" ]; then
+  info "  🧪 Staging mode — sandbox Midtrans keys"
+  DB_PASSWORD=$(get_secret "DB_PASSWORD" "Enter database password" "DB_PASSWORD")
+  GOOGLE_CLIENT_ID=$(get_secret "GOOGLE_CLIENT_ID" "Enter Google OAuth Client ID" "GOOGLE_CLIENT_ID")
+  GOOGLE_CLIENT_SECRET=$(get_secret "GOOGLE_CLIENT_SECRET" "Enter Google OAuth Client Secret" "GOOGLE_CLIENT_SECRET")
   MIDTRANS_MERCHANT_ID=$(get_secret "MIDTRANS_MERCHANT_ID" "Enter Midtrans Merchant ID" "MIDTRANS_MERCHANT_ID")
-else
   MIDTRANS_SERVER_KEY=$(get_secret "MIDTRANS_SERVER_KEY" "Enter Midtrans SANDBOX Server Key" "MIDTRANS_SERVER_KEY")
   MIDTRANS_CLIENT_KEY=$(get_secret "MIDTRANS_CLIENT_KEY" "Enter Midtrans SANDBOX Client Key" "MIDTRANS_CLIENT_KEY")
+else
+  info "  🔴 Production mode — PRODUCTION Midtrans keys required!"
+  DB_PASSWORD=$(get_secret "DB_PASSWORD" "Enter database password" "DB_PASSWORD")
+  GOOGLE_CLIENT_ID=$(get_secret "GOOGLE_CLIENT_ID" "Enter Google OAuth Client ID" "GOOGLE_CLIENT_ID")
+  GOOGLE_CLIENT_SECRET=$(get_secret "GOOGLE_CLIENT_SECRET" "Enter Google OAuth Client Secret" "GOOGLE_CLIENT_SECRET")
+  MIDTRANS_SERVER_KEY=$(get_secret "MIDTRANS_PRODUCTION_SERVER_KEY" "Enter Midtrans PRODUCTION Server Key" "MIDTRANS_PRODUCTION_SERVER_KEY")
+  MIDTRANS_CLIENT_KEY=$(get_secret "MIDTRANS_PRODUCTION_CLIENT_KEY" "Enter Midtrans PRODUCTION Client Key" "MIDTRANS_PRODUCTION_CLIENT_KEY")
   MIDTRANS_MERCHANT_ID=$(get_secret "MIDTRANS_MERCHANT_ID" "Enter Midtrans Merchant ID" "MIDTRANS_MERCHANT_ID")
 fi
 
