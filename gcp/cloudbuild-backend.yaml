@@ -22,6 +22,7 @@ steps:
     args:
       - '-c'
       - |
+        set -e
         cd backend
         echo "📦 Downloading Go modules..."
         go mod tidy
