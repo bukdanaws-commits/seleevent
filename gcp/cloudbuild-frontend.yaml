@@ -30,6 +30,7 @@ steps:
       - 'NEXT_PUBLIC_USE_DIRECT_BACKEND=true'
       - 'NEXT_PUBLIC_MIDTRANS_CLIENT_KEY=$_MIDTRANS_CLIENT_KEY'
       - 'NEXT_PUBLIC_MIDTRANS_IS_SANDBOX=true'
+      - 'NEXT_PUBLIC_GOOGLE_CLIENT_ID=$_GOOGLE_CLIENT_ID'
       - 'NODE_ENV=production'
     args:
       - '-c'
@@ -56,6 +57,7 @@ steps:
       - '--build-arg=NEXT_PUBLIC_USE_DIRECT_BACKEND=true'
       - '--build-arg=NEXT_PUBLIC_MIDTRANS_CLIENT_KEY=$_MIDTRANS_CLIENT_KEY'
       - '--build-arg=NEXT_PUBLIC_MIDTRANS_IS_SANDBOX=true'
+      - '--build-arg=NEXT_PUBLIC_GOOGLE_CLIENT_ID=$_GOOGLE_CLIENT_ID'
       - '.'
     waitFor: ['build-nextjs']
 
@@ -93,6 +95,7 @@ substitutions:
   _REPO: eventku
   _BACKEND_URL: https://eventku-api-xxxxx-xx.a.run.app
   _MIDTRANS_CLIENT_KEY: Mid-client-sJtCsptoF8hoaFgN
+  _GOOGLE_CLIENT_ID: 503551786622-k3uajo9c2d6om6qnqofsa3b47fvo5o6g.apps.googleusercontent.com
   _COMMIT_SHA: manual
 
 # ── Build options ───────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@ import { getSSEClient, disconnectSSE } from '@/lib/sse'
 
 // ─── GOOGLE OAUTH CONFIG ──────────────────────────────────────────────────
 
-export const GOOGLE_CLIENT_ID = '503551786622-k3uajo9c2d6om6qnqofsa3b47fvo5o6g.apps.googleusercontent.com'
+export const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '503551786622-k3uajo9c2d6om6qnqofsa3b47fvo5o6g.apps.googleusercontent.com'
 
 // ─── TYPES ─────────────────────────────────────────────────────────────────
 

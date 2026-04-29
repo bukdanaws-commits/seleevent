@@ -242,7 +242,7 @@ info "Building and deploying frontend..."
 
 gcloud builds submit . \
   --config=gcp/cloudbuild-frontend.yaml \
-  --substitutions=_REGION=$REGION,_REPO=$REPO,_BACKEND_URL=$BACKEND_URL,_MIDTRANS_CLIENT_KEY=$MIDTRANS_CLIENT_KEY,_COMMIT_SHA=$SHORT_SHA \
+  --substitutions=_REGION=$REGION,_REPO=$REPO,_BACKEND_URL=$BACKEND_URL,_MIDTRANS_CLIENT_KEY=$MIDTRANS_CLIENT_KEY,_GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID,_COMMIT_SHA=$SHORT_SHA \
   --project=$PROJECT_ID \
   --timeout=1800s
 
