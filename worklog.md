@@ -47,3 +47,31 @@ Stage Summary:
 - Frontend lint: clean
 - Staging backend currently in degraded mode (needs redeploy from Cloud Shell)
 - Next step: User needs to redeploy from Cloud Shell using deploy scripts
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Fix database schema + seed data UUID issues after failed seeding
+
+Work Log:
+- Analyzed Cloud Shell output showing 3 categories of errors during database seeding
+- Issue 1: schema.sql line 83-84 has inline UNIQUE (tenant_id) WHERE cancelled_at IS NULL — PostgreSQL doesn't support partial unique constraints inline, only via CREATE UNIQUE INDEX
+- Issue 2: All seed data UUIDs use non-hex prefixes (t, u, o, g, tk, tt) that PostgreSQL's uuid type rejects — e.g. "t0000000-0000-0000-0000-000000000001" (t is not hex)
+- Issue 3: Batch INSERT splitting bug — tickets, redemptions, gate_logs, notifications batches >15 rows lose the INSERT INTO header on 2nd+ batch → syntax errors
+- Issue 4: cloud-sql-proxy defaults to PUBLIC IP but instance only has PRIVATE IP → need --private-ip flag
+- Fixed schema.sql: moved inline UNIQUE WHERE → separate CREATE UNIQUE INDEX ... WHERE
+- Fixed generate_seed.py: replaced all non-hex UUID prefixes with hex-only patterns:
+  10000000=tenant, 11000000=subscription, 20000000=user, 30000000=event,
+  40000000=ticket_type, 50000000=order, 60000000=counter, 70000000=gate, 80000000=ticket
+- Fixed generate_seed.py: each INSERT batch now gets its own INSERT INTO header
+- Fixed seed-database.sh: added --private-ip to cloud-sql-proxy command
+- Regenerated seed-data.sql: 760 lines, 1622 UUIDs, all valid hex format
+- Validated all UUIDs with Python regex: 0 invalid
+- Pushed to GitHub: abef8f4 → origin/main
+- Frontend lint: clean
+
+Stage Summary:
+- All 4 database issues fixed
+- Seed data fully regenerated with valid UUIDs
+- Committed and pushed to GitHub (abef8f4)
+- User needs to: pull latest code, redeploy, reseed with fixed scripts
